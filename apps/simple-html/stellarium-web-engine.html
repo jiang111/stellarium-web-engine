@@ -17,6 +17,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@mdi/font@3.x/css/materialdesignicons.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
 
+
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
 
 <style>
@@ -134,7 +135,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/vuetify/dist/vuetify.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
 <script src="https://unpkg.com/i18next/dist/umd/i18next.min.js"></script>
 <script src="https://www.unpkg.com/i18next-xhr-backend/dist/umd/i18nextXHRBackend.min.js"></script>
 <script src="../../build/stellarium-web-engine.js"></script>
@@ -224,8 +225,9 @@
           // Force ui update when there is any change.
           stel.change(function(obj, attr) {
             if (attr !== "hovered") {
-              that.stel = Object.assign(Object.create(stel), {}, stel)
-          })
+              that.stel = Object.assign(Object.create(stel), {}, stel);
+            } 
+          });
 
           stel.setFont('regular', 'static/fonts/Roboto-Regular.ttf', 1.38);
           stel.setFont('bold', 'static/fonts/Roboto-Bold.ttf', 1.38);
