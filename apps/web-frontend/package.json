@@ -10,6 +10,10 @@
     "dev": "vue-cli-service serve",
     "i18n": "vue-cli-service i18n:report"
   },
+  "resolutions": {
+    "minimatch": "3.0.4",
+    "@achrinza/node-ipc": "9.1.4"
+  },
   "dependencies": {
     "@mdi/font": "^3.6.95",
     "core-js": "^3.4.4",
