@@ -10,7 +10,6 @@ import Vue from 'vue'
 import _ from 'lodash'
 import StelWebEngine from '@/assets/js/stellarium-web-engine.js'
 import Moment from 'moment'
-
 var DDDate = Date
 DDDate.prototype.getJD = function () {
   return (this.getTime() / 86400000) + 2440587.5
@@ -362,39 +361,87 @@ const swh = {
   setSweObjAsSelection: function (obj) {
     const $stel = Vue.prototype.$stel
     $stel.core.selection = obj
+    console.log('targeting object: ' + obj)
     $stel.pointAndLock(obj)
   },
+  raDecToAzAlt: function (ra, dec, raUnit) {
+    const $stel = Vue.prototype.$stel
+    let raRad
+    if (raUnit === 'hours') {
+      raRad = ra * 15 * Math.PI / 180 // 小时 -> 度 -> 弧度
+    } else {
+      raRad = ra * Math.PI / 180 // 度 -> 弧度
+    }
 
+    // 2. 转换 Dec 到弧度
+    const decRad = dec * Math.PI / 180
+
+    // 3. 构建 ICRF 方向向量 (J2000坐标系)
+    const icrf = $stel.s2c(raRad, decRad)
+
+    console.log('输入坐标:')
+    console.log(`  RA: ${ra} ${raUnit}`)
+    console.log(`  Dec: ${dec}°`)
+    console.log(`ICRF 向量: [${icrf[0].toFixed(6)}, ${icrf[1].toFixed(6)}, ${icrf[2].toFixed(6)}]`)
+
+    // 4. 将 ICRF 坐标转换为 MOUNT 坐标系 (方位角/高度角)
+    // 注意：第四个分量为 0 表示这是方向向量（无限远）
+    const mount = $stel.convertFrame(
+      $stel.core.observer,
+      'ICRF', // 源坐标系: J2000
+      'MOUNT', // 目标坐标系: 观测坐标系
+      [icrf[0], icrf[1], icrf[2], 0]
+    )
+
+    console.log(`MOUNT 向量: [${mount[0].toFixed(6)}, ${mount[1].toFixed(6)}, ${mount[2].toFixed(6)}]`)
+
+    // 5. 将向量转换为球面坐标 (yaw, pitch)
+    const azAlt = $stel.c2s(mount)
+
+    return {
+      yaw: azAlt[0], // 方位角（弧度）
+      pitch: azAlt[1] // 高度角（弧度）
+    }
+  },
+
+  raDecToLookAtPos: function (ra, dec, raUnit) {
+    let raRad
+    if (raUnit === 'hours') {
+      raRad = ra * 15 * Math.PI / 180 // 小时 -> 度 -> 弧度
+    } else {
+      raRad = ra * Math.PI / 180 // 度 -> 弧度
+    }
+    const $stel = Vue.prototype.$stel
+    const decRad = dec * Math.PI / 180
+
+    const icrf = $stel.s2c(raRad, decRad)
+    console.log(`ICRF向量: [${icrf[0].toFixed(6)}, ${icrf[1].toFixed(6)}, ${icrf[2].toFixed(6)}]`)
+
+    return $stel.convertFrame(
+      $stel.observer,
+      'ICRF', // 源: J2000 赤道坐标系
+      'MOUNT', // 目标: 观测坐标系（Alt/Az）
+      [icrf[0], icrf[1], icrf[2], 0]
+    )
+  },
   /**
    * Point and lock the view to a specific RA/DEC coordinate
    * @param {number} ra - Right Ascension in radians
    * @param {number} dec - Declination in radians
    * @param {number} duration - Animation duration in seconds (default: 1)
-   * @param {string} name - Optional name for the target (default: 'Target')
-   * @param {string} frame - Coordinate frame: 'ICRF'(J2000, default), 'JNOW', 'OBSERVED' etc.
    * @returns {boolean} - Success status
    */
-  pointAndLockByRaDec: function (ra, dec, duration = 1, name = 'Target', frame = 'ICRF') {
-    const $stel = Vue.prototype.$stel
-
-    // Input validation
+  pointAndLockByRaDec: function (ra, dec, duration = 1) {
     if (ra === undefined || dec === undefined) {
       console.error('pointAndLockByRaDec: RA and DEC are required')
       return false
     }
+    const $stel = Vue.prototype.$stel
+    $stel.core.selection = 0
+    const mount = this.raDecToLookAtPos(ra, dec, 'hours')
+    console.log(`MOUNT向量: [${mount[0].toFixed(6)}, ${mount[1].toFixed(6)}, ${mount[2].toFixed(6)}]`)
 
-    // Convert RA/Dec to cartesian in ICRF frame
-    const posICRF = $stel.s2c(ra, dec)
-    console.log('pointAndLockByRaDec: RA=' + (ra * 180 / Math.PI).toFixed(4) + '° DEC=' + (dec * 180 / Math.PI).toFixed(4) + '° -> ICRF pos:', posICRF)
-
-    // Get observer and convert ICRF position to VIEW frame
-    const obs = $stel.observer
-    const posView = $stel.convertFrame(obs, 'ICRF', 'VIEW', posICRF)
-    console.log('pointAndLockByRaDec: VIEW pos:', posView)
-
-    // Use lookAt with VIEW coordinates
-    $stel.lookAt([posView[0], posView[1], posView[2]], duration)
-    $stel.core.selection = null
+    $stel.lookAt([mount[0], mount[1], mount[2]], duration)
 
     return true
   },
@@ -414,6 +461,7 @@ const swh = {
     // Try to find existing object first
     const obj = this.skySource2SweObj(skySource)
     if (obj) {
+      console.log('obj:' + obj)
       this.setSweObjAsSelection(obj)
       return true
     }
@@ -428,7 +476,7 @@ const swh = {
       const $stel = Vue.prototype.$stel
       $stel.core.selection = null
 
-      return this.pointAndLockByRaDec(skySource.model_data.ra, skySource.model_data.dec, duration, objectName)
+      return this.pointAndLockByRaDec(skySource.model_data.ra, skySource.model_data.dec, duration)
     }
 
     console.error('pointAndLockBySkySource: Cannot find object and no RA/DEC data available')
@@ -485,6 +533,7 @@ const swh = {
       })
   },
 
+  /// 通过浏览器定位
   getGeolocation: function () {
     console.log('Getting geolocalization')
 

@@ -161,6 +161,9 @@ export default {
     },
     setFullscreen: function (b) {
       swh.pointAndLockBySkySource({
+        names: [
+          'M 31'
+        ],
         model_data: {
           ra: 0.7123,
           dec: 41.26875

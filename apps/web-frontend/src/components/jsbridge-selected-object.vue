@@ -30,6 +30,8 @@ export default {
   },
   watch: {
     selectedObject: function (newObject) {
+      console.log('selectedObjectChanged resource:', JSON.stringify(newObject))
+
       // 停止之前的定时器
       if (this.updateTimer) {
         clearInterval(this.updateTimer)
