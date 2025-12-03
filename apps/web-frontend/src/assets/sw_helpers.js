@@ -53,18 +53,13 @@ const swh = {
     })
   },
 
-  monthNames: ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ],
+  monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
 
   astroConstants: {
     // Light time for 1 au in s
-    ERFA_AULT: 499.004782,
-    // Seconds per day
-    ERFA_DAYSEC: 86400.0,
-    // Days per Julian year
-    ERFA_DJY: 365.25,
-    // Astronomical unit in m
+    ERFA_AULT: 499.004782, // Seconds per day
+    ERFA_DAYSEC: 86400.0, // Days per Julian year
+    ERFA_DJY: 365.25, // Astronomical unit in m
     ERFA_DAU: 149597870000
   },
 
@@ -201,8 +196,12 @@ const swh = {
     }
     res = res.concat(ss.names.map(n => Vue.prototype.$stel.designationCleanup(n, flags)))
     // Remove duplicates, this can happen between * and V* catalogs
-    res = res.filter(function (v, i) { return res.indexOf(v) === i })
-    res = res.filter(function (v, i) { return !v.startsWith('CON ') })
+    res = res.filter(function (v, i) {
+      return res.indexOf(v) === i
+    })
+    res = res.filter(function (v, i) {
+      return !v.startsWith('CON ')
+    })
     return res
   },
 
@@ -366,6 +365,76 @@ const swh = {
     $stel.pointAndLock(obj)
   },
 
+  /**
+   * Point and lock the view to a specific RA/DEC coordinate
+   * @param {number} ra - Right Ascension in radians
+   * @param {number} dec - Declination in radians
+   * @param {number} duration - Animation duration in seconds (default: 1)
+   * @param {string} name - Optional name for the target (default: 'Target')
+   * @param {string} frame - Coordinate frame: 'ICRF'(J2000, default), 'JNOW', 'OBSERVED' etc.
+   * @returns {boolean} - Success status
+   */
+  pointAndLockByRaDec: function (ra, dec, duration = 1, name = 'Target', frame = 'ICRF') {
+    const $stel = Vue.prototype.$stel
+
+    // Input validation
+    if (ra === undefined || dec === undefined) {
+      console.error('pointAndLockByRaDec: RA and DEC are required')
+      return false
+    }
+
+    // Convert RA/Dec to cartesian in ICRF frame
+    const posICRF = $stel.s2c(ra, dec)
+    console.log('pointAndLockByRaDec: RA=' + (ra * 180 / Math.PI).toFixed(4) + '° DEC=' + (dec * 180 / Math.PI).toFixed(4) + '° -> ICRF pos:', posICRF)
+
+    // Get observer and convert ICRF position to VIEW frame
+    const obs = $stel.observer
+    const posView = $stel.convertFrame(obs, 'ICRF', 'VIEW', posICRF)
+    console.log('pointAndLockByRaDec: VIEW pos:', posView)
+
+    // Use lookAt with VIEW coordinates
+    $stel.lookAt([posView[0], posView[1], posView[2]], duration)
+    $stel.core.selection = null
+
+    return true
+  },
+
+  /**
+   * Point and lock by SkySource object, supporting both object lookup and RA/DEC fallback
+   * @param {object} skySource - SkySource object
+   * @param {number} duration - Animation duration in seconds (default: 1)
+   * @returns {boolean} - Success status
+   */
+  pointAndLockBySkySource: function (skySource, duration = 1) {
+    if (!skySource) {
+      console.error('pointAndLockBySkySource: skySource is required')
+      return false
+    }
+
+    // Try to find existing object first
+    const obj = this.skySource2SweObj(skySource)
+    if (obj) {
+      this.setSweObjAsSelection(obj)
+      return true
+    }
+
+    // Fallback: use RA/DEC if available
+    if (skySource.model_data && skySource.model_data.ra !== undefined && skySource.model_data.dec !== undefined) {
+      // Get object name for logging
+      const objectName = skySource.names && skySource.names[0] ? skySource.names[0] : 'Unknown Target'
+
+      console.log('Object not found in engine, using RA/DEC for', objectName, '- RA:', skySource.model_data.ra, 'Dec:', skySource.model_data.dec)
+
+      const $stel = Vue.prototype.$stel
+      $stel.core.selection = null
+
+      return this.pointAndLockByRaDec(skySource.model_data.ra, skySource.model_data.dec, duration, objectName)
+    }
+
+    console.error('pointAndLockBySkySource: Cannot find object and no RA/DEC data available')
+    return false
+  },
+
   // Get data for a SkySource from wikipedia
   getSkySourceSummaryFromWikipedia: function (ss) {
     let title
@@ -410,8 +479,7 @@ const swh = {
     }
     if (!title) return Promise.reject(new Error("Can't find wikipedia compatible name"))
 
-    return fetch('https://en.wikipedia.org/w/api.php?action=query&redirects&prop=extracts&exintro&exlimit=1&exchars=300&format=json&origin=*&titles=' + title,
-      { headers: { 'Content-Type': 'application/json; charset=UTF-8' } })
+    return fetch('https://en.wikipedia.org/w/api.php?action=query&redirects&prop=extracts&exintro&exlimit=1&exchars=300&format=json&origin=*&titles=' + title, { headers: { 'Content-Type': 'application/json; charset=UTF-8' } })
       .then(response => {
         return response.json()
       })
@@ -424,9 +492,7 @@ const swh = {
     return Vue.jsonp('https://freegeoip.stellarium.org/json/')
       .then(location => {
         var pos = {
-          lat: location.latitude,
-          lng: location.longitude,
-          accuracy: 20000
+          lat: location.latitude, lng: location.longitude, accuracy: 20000
         }
         console.log('GeoIP localization: ' + JSON.stringify(pos))
         return pos
@@ -437,9 +503,7 @@ const swh = {
           return new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(function (position) {
               var pos = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude,
-                accuracy: position.coords.accuracy
+                lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy
               }
               resolve(pos)
             }, function () {
@@ -474,8 +538,7 @@ const swh = {
       accuracy: pos.accuracy,
       street_address: ''
     }
-    return fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + pos.lat + '&lon=' + pos.lng,
-      { headers: { 'Content-Type': 'application/json; charset=UTF-8' } }).then(response => {
+    return fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + pos.lat + '&lon=' + pos.lng, { headers: { 'Content-Type': 'application/json; charset=UTF-8' } }).then(response => {
       if (response.ok) {
         return response.json().then(res => {
           const city = res.address.city ? res.address.city : (res.address.village ? res.address.village : res.name)
@@ -500,9 +563,7 @@ const swh = {
     var R = 6371000 // Radius of the earth in m
     var dLat = deg2rad(lat2 - lat1)
     var dLon = deg2rad(lon2 - lon1)
-    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
     var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     var d = R * c // Distance in m
     return d
