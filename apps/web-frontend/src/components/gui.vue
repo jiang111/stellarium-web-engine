@@ -8,45 +8,28 @@
 
 <template>
 
-<div class="click-through" style="position:absolute; width: 100%; height: 100%; display:flex; align-items: flex-end;">
-  <toolbar v-if="$store.state.showMainToolBar" class="get-click"></toolbar>
-  <observing-panel></observing-panel>
-  <template v-for="(item, i) in pluginsGuiComponents">
-    <component :is="item" :key="i"></component>
-  </template>
-  <template v-for="(item, i) in dialogs">
-    <component :is="item" :key="i + pluginsGuiComponents.length"></component>
-  </template>
-  <selected-object-info style="position: absolute; top: 48px; left: 0px; width: 380px; max-width: calc(100vw - 12px); margin: 6px" class="get-click"></selected-object-info>
-  <progress-bars style="position: absolute; bottom: 54px; right: 12px;"></progress-bars>
-  <bottom-bar style="position:absolute; width: 100%; justify-content: center; bottom: 0; display:flex; margin-bottom: 0px" class="get-click"></bottom-bar>
-  <js-bridge-selected-object></js-bridge-selected-object>
-  <js-bridge></js-bridge>
-</div>
+  <div class="click-through" style="position:absolute; width: 100%; height: 100%; display:flex; align-items: flex-end;">
+    <template v-for="(item, i) in pluginsGuiComponents">
+      <component :is="item" :key="i"></component>
+    </template>
+    <template v-for="(item, i) in dialogs">
+      <component :is="item" :key="i + pluginsGuiComponents.length"></component>
+    </template>
+    <js-bridge-selected-object></js-bridge-selected-object>
+    <js-bridge></js-bridge>
+  </div>
 
 </template>
 
 <script>
-import Toolbar from '@/components/toolbar.vue'
-import BottomBar from '@/components/bottom-bar.vue'
-import SelectedObjectInfo from '@/components/selected-object-info.vue'
-import ProgressBars from '@/components/progress-bars'
 import JsBridge from '@/components/jsbridge.vue'
 import JsBridgeSelectedObject from '@/components/jsbridge-selected-object.vue'
 
-import DataCreditsDialog from '@/components/data-credits-dialog.vue'
-import ViewSettingsDialog from '@/components/view-settings-dialog.vue'
-import PlanetsVisibility from '@/components/planets-visibility.vue'
-import LocationDialog from '@/components/location-dialog.vue'
-import ObservingPanel from '@/components/observing-panel.vue'
-
 export default {
   data: function () {
-    return {
-    }
+    return {}
   },
-  methods: {
-  },
+  methods: {},
   computed: {
     pluginsGuiComponents: function () {
       let res = []
@@ -74,7 +57,10 @@ export default {
       return res
     }
   },
-  components: { Toolbar, BottomBar, JsBridge, JsBridgeSelectedObject, DataCreditsDialog, ViewSettingsDialog, PlanetsVisibility, SelectedObjectInfo, LocationDialog, ProgressBars, ObservingPanel }
+  components: {
+    JsBridge,
+    JsBridgeSelectedObject
+  }
 }
 </script>
 

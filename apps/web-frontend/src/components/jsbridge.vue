@@ -13,7 +13,16 @@ export default {
       calibrationOffset: {
         azimuth: 0,
         altitude: 0
-      }
+      },
+      smoothing: {
+        enabled: true,
+        factor: 0.3,
+        current: { azimuth: 0, altitude: 0 },
+        target: { azimuth: 0, altitude: 0 }
+      },
+      isEnabled: false,
+      lastUpdate: 0,
+      lastStableAzimuth: 0
     }
   },
   mounted () {
@@ -28,8 +37,50 @@ export default {
         Math.sin(altitude) // Z = 上分量
       ]
     },
+    angleDiff (a, b) {
+      let diff = a - b
+      while (diff > Math.PI) diff -= 2 * Math.PI
+      while (diff < -Math.PI) diff += 2 * Math.PI
+      return diff
+    },
+    averageAngles (angles) {
+      let sumSin = 0
+      let sumCos = 0
+
+      for (const angle of angles) {
+        sumSin += Math.sin(angle)
+        sumCos += Math.cos(angle)
+      }
+
+      return Math.atan2(sumSin / angles.length, sumCos / angles.length)
+    },
+    applyDeadZone (newValue, lastValue, threshold) {
+      const diff = this.angleDiff(newValue, lastValue)
+      if (Math.abs(diff) < threshold) {
+        return lastValue
+      }
+      return newValue
+    },
+    movingAverage (type, value) {
+      const buffer = this.buffer[type]
+      buffer.push(value)
+
+      if (buffer.length > this.buffer.maxSize) {
+        buffer.shift()
+      }
+
+      // 计算平均值（考虑角度循环性）
+      if (type === 'azimuth') {
+        return this.averageAngles(buffer)
+      } else {
+        return buffer.reduce((a, b) => a + b, 0) / buffer.length
+      }
+    },
+    lerpAngle (from, to, t) {
+      const diff = this.angleDiff(to, from)
+      return from + diff * t
+    },
     updateState () {
-      console.log('JSBridge getState called')
       const data =
         {
           toggleConstellationLines: this.$store.state.stel.constellations.lines_visible,
@@ -40,7 +91,7 @@ export default {
           toggleEquatorialGrid: this.$store.state.stel.lines.equatorial_jnow.visible,
           toggleEquatorialJ2000Grid: this.$store.state.stel.lines.equatorial.visible,
           toggleNightMode: this.$store.state.nightmode,
-          currentTime: this.pickerDate,
+          currentTime: this.getLocalTime(),
           location: this.$store.state.currentLocation
         }
       console.log('JSBridge getState returning', data)
@@ -90,12 +141,8 @@ export default {
           this.updateState()
         },
         gotoAndLock: (ss) => {
-          let obj = swh.skySource2SweObj(ss)
-          if (!obj) {
-            obj = this.$stel.createObj(ss.model, ss)
-            this.$selectionLayer.add(obj)
-            swh.setSweObjAsSelection(obj)
-          } else {
+          console.log('JSBridge gotoAndLock:', ss)
+          if (ss.model === 'custom') {
             const raDeg = ss.model_data.ra
             const decDeg = ss.model_data.dec
 
@@ -106,8 +153,34 @@ export default {
               pos: this.$stel.s2c(raRad, decRad)
             })
             swh.setSweObjAsSelection(m31Coords, ss.lock ?? true)
+          } else {
+            let obj = swh.skySource2SweObj(ss)
+            if (!obj) {
+              obj = this.$stel.createObj(ss.model, ss)
+              this.$selectionLayer.add(obj)
+              swh.setSweObjAsSelection(obj)
+            } else {
+              const raDeg = ss.model_data.ra
+              const decDeg = ss.model_data.dec
+
+              const raRad = raDeg * Math.PI / 180
+              const decRad = decDeg * Math.PI / 180
+
+              const m31Coords = this.$stel.createObj('coordinates', {
+                pos: this.$stel.s2c(raRad, decRad)
+              })
+              swh.setSweObjAsSelection(m31Coords, ss.lock ?? true)
+            }
           }
           this.updateState()
+        },
+        lockToSelection: () => {
+          if (this.$stel.core.selection) {
+            this.$stel.pointAndLock(this.$stel.core.selection, 0.5)
+          }
+        },
+        unselect: () => {
+          this.$stel.core.selection = 0
         },
         setLocation: (loc) => {
           console.log('JSBridge setLocation:', loc)
@@ -116,59 +189,91 @@ export default {
         },
 
         /// 陀螺仪
-        setOrientation: (data) => {
-          const now = Date.now()
-          if (now - this.lastUpdate < 16) {
-            return
-          }
-          this.lastUpdate = now
-          console.log('JSBridge setOrientation:', data)
-          const azimuth = data.azimuth + this.calibrationOffset.azimuth
-          const altitude = data.altitude + this.calibrationOffset.altitude
-          const observed = this.azAltToObserved(azimuth, altitude)
-          this.$stel.lookAt(observed, 0)
-          this.updateState()
-        },
+        setOrientation:
+          (data) => {
+            const now = Date.now()
+            if (now - this.lastUpdate < this.updateInterval) {
+              return
+            }
+            this.lastUpdate = now
+
+            // 接收 Flutter 数据
+            let azimuth = data.azimuth
+            const altitude = data.altitude
+
+            // 当俯仰角接近垂直时，保持上次稳定的方位角
+            const pitchWeight = Math.abs(Math.cos(altitude))
+            if (pitchWeight < 0.3) {
+              azimuth = this.lastStableAzimuth
+            } else {
+              this.lastStableAzimuth = azimuth
+            }
+
+            // 更新目标值
+            this.smoothing.target.azimuth = azimuth
+            this.smoothing.target.altitude = altitude
+
+            if (this.smoothing.enabled) {
+              // 线性插值（LERP）到目标值
+              const factor = this.smoothing.factor
+
+              this.smoothing.current.azimuth = this.lerpAngle(
+                this.smoothing.current.azimuth,
+                this.smoothing.target.azimuth,
+                factor
+              )
+
+              this.smoothing.current.altitude +=
+                (this.smoothing.target.altitude - this.smoothing.current.altitude) * factor
+              const observed = this.azAltToObserved(azimuth, altitude)
+              this.$stel.lookAt(observed, 0)
+              this.updateState()
+            }
+          },
 
         // 设置时间
-        setDateTime: (isoString) => {
-          const m = Moment(isoString)
-          m.local()
-          m.milliseconds(this.getLocalTime().milliseconds())
-          this.$stel.core.observer.utc = m.toDate().getMJD()
-          this.updateState()
-        },
-        zoomIn: (b) => {
-          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-          this.$stel.zoomTo(currentFov * b.speed * Math.PI / 180, 0.4)
-          this.zoomTimeout = setTimeout(_ => {
-            this.zoomIn()
-          }, b.timeout)
-          this.updateState()
-        },
-        zoomOut: (b) => {
-          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-          this.$stel.zoomTo(currentFov * b.speed * Math.PI / 180, 0.6)
-          this.zoomTimeout = setTimeout(_ => {
-            this.zoomOut()
-          }, b.timeout)
-          this.updateState()
-        },
-        stopZoom: () => {
-          if (this.zoomTimeout) {
-            clearTimeout(this.zoomTimeout)
-            this.zoomTimeout = undefined
-          }
-          this.updateState()
-        },
+        setDateTime:
+          (million) => {
+            const isoString = new Date(million).toISOString()
+            const m = Moment(isoString)
+            m.local()
+            m.milliseconds(this.getLocalTime().milliseconds())
+            this.$stel.core.observer.utc = m.toDate().getMJD()
+            this.updateState()
+          },
+        zoomIn:
+          (b) => {
+            const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+            this.$stel.zoomTo(currentFov * b.speed * Math.PI / 180, 0.4)
+            this.zoomTimeout = setTimeout(_ => {
+              this.zoomIn()
+            }, b.timeout)
+            this.updateState()
+          },
+        zoomOut:
+          (b) => {
+            const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+            this.$stel.zoomTo(currentFov * b.speed * Math.PI / 180, 0.6)
+            this.zoomTimeout = setTimeout(_ => {
+              this.zoomOut()
+            }, b.timeout)
+            this.updateState()
+          },
+        stopZoom:
+          () => {
+            if (this.zoomTimeout) {
+              clearTimeout(this.zoomTimeout)
+              this.zoomTimeout = undefined
+            }
+            this.updateState()
+          },
         // 获取当前状态
-        getState: () => {
-          this.updateState()
-        }
+        getState:
+          () => {
+            this.updateState()
+          }
       })
     },
-
-    // ... 保留原有方法
     getLocalTime: function () {
       var d = new Date()
       d.setMJD(this.$store.state.stel.observer.utc)

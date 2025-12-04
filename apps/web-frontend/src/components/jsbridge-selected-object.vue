@@ -3,6 +3,7 @@
 </template>
 <script>
 import jsbridge from '@/utils/jsbridge'
+import swh from '@/assets/sw_helpers'
 
 export default {
   components: {},
@@ -10,10 +11,6 @@ export default {
     return {
       updateTimer: undefined
     }
-  },
-  mounted () {
-    // 注册所有可供 App 调用的功能
-    this.registerBridgeActions()
   },
   beforeDestroy () {
     if (this.updateTimer) {
@@ -29,6 +26,9 @@ export default {
       if (!this.$store.state.stel.lock) return true
       if (this.$store.state.stel.lock !== this.$store.state.stel.selection) return true
       return false
+    },
+    stelSelectionId: function () {
+      return this.$store.state.stel && this.$store.state.stel.selection ? this.$store.state.stel.selection : undefined
     }
   },
   watch: {
@@ -47,7 +47,7 @@ export default {
         // 启动定时器，每秒更新一次位置信息（ra/dec 和 az/alt 会随时间变化）
         this.updateTimer = setInterval(() => {
           this.sendSelectedObjectData()
-        }, 1000)
+        }, 3000)
       } else {
         jsbridge.postMessage('selectedObjectChanged', null)
         console.log('selectedObjectChanged', null)
@@ -56,6 +56,21 @@ export default {
     showPointToButton: function (show) {
       // 居中按钮是否显示,如果当前选中的天体没有居中，那就会要求显示这个按钮
       jsbridge.postMessage('showPointToButtonChanged', show)
+    },
+    stelSelectionId: function (s) {
+      if (!this.$stel.core.selection) {
+        this.$store.commit('setSelectedObject', 0)
+        return
+      }
+      swh.sweObj2SkySource(this.$stel.core.selection).then(res => {
+        this.$store.commit('setSelectedObject', res)
+      }, err => {
+        console.log("Couldn't find info for object " + s + ':' + err)
+        this.$store.commit('setSelectedObject', 0)
+      })
+    },
+    showShareLinkDialog: function (b) {
+      this.shareLink = swh.getShareLink(this)
     }
   },
   methods: {
@@ -161,20 +176,6 @@ export default {
 
       jsbridge.postMessage('selectedObjectChanged', result)
       console.log('selectedObjectChanged', JSON.stringify(result))
-    },
-    // 注册 JSBridge 动作
-    registerBridgeActions () {
-      jsbridge.registerActions({
-        // 强制当前选中的天体居中
-        lockToSelection: function () {
-          if (this.$stel.core.selection) {
-            this.$stel.pointAndLock(this.$stel.core.selection, 0.5)
-          }
-        },
-        unselect: function () {
-          this.$stel.core.selection = 0
-        }
-      })
     }
   }
 }
