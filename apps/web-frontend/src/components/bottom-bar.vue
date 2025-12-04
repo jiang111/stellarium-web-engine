@@ -159,16 +159,24 @@ export default {
     locationClicked: function () {
       this.$store.commit('toggleBool', 'showLocationDialog')
     },
-    setFullscreen: function (b) {
-      swh.pointAndLockBySkySource({
-        names: [
-          'M 31'
-        ],
-        model_data: {
-          ra: 0.7123,
-          dec: 41.26875
-        }
+
+    gotoTarget: function (ra, dec) {
+      const raRad = ra * 15 * Math.PI / 180
+      const decRad = dec * Math.PI / 180
+
+      const m31Coords = this.$stel.createObj('coordinates', {
+        pos: this.$stel.s2c(raRad, decRad)
       })
+      swh.setSweObjAsSelection(m31Coords)
+    },
+    setFullscreen: function (b) {
+      this.gotoTarget(0.7123, 41.2688)
+      setTimeout(() => {
+        this.gotoTarget(5.5881, -5.3900)
+        setTimeout(() => {
+          this.gotoTarget(8.6703, 19.6211)
+        }, 2000)
+      }, 2000)
 
       // this.$fullscreen.toggle(document.body, {
       //   wrap: false,

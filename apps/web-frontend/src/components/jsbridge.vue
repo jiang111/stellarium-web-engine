@@ -1,6 +1,7 @@
 <script>
 import Moment from 'moment'
 import jsbridge from '@/utils/jsbridge'
+import swh from '@/assets/sw_helpers'
 
 export default {
   components: {},
@@ -55,6 +56,20 @@ export default {
         // 全屏
         toggleFullscreen: (enabled) => {
           this.setFullscreen(enabled)
+        },
+        gotoAndLock: (obj) => {
+          const ra = obj.ra
+          const dec = obj.dec
+          const raDeg = ra * 15
+          const decDeg = dec
+
+          const raRad = raDeg * Math.PI / 180
+          const decRad = decDeg * Math.PI / 180
+
+          const m31Coords = this.$stel.createObj('coordinates', {
+            pos: this.$stel.s2c(raRad, decRad)
+          })
+          swh.setSweObjAsSelection(m31Coords)
         },
         // 设置位置
         // {
