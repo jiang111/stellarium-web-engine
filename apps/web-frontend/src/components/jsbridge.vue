@@ -6,13 +6,28 @@ import swh from '@/assets/sw_helpers'
 export default {
   components: {},
   data: function () {
-    return {}
+    return {
+      calibrationOffset: {
+        azimuth: 0,
+        altitude: 0
+      }
+    }
   },
   mounted () {
     // 注册所有可供 App 调用的功能
     this.registerBridgeActions()
   },
   methods: {
+    azAltToObserved (azimuth, altitude) {
+      const cosAlt = Math.cos(altitude)
+
+      // OBSERVED 坐标系: X=北, Y=东, Z=上
+      return [
+        Math.cos(azimuth) * cosAlt, // X = 北分量
+        Math.sin(azimuth) * cosAlt, // Y = 东分量
+        Math.sin(altitude) // Z = 上分量
+      ]
+    },
     // 注册 JSBridge 动作
     registerBridgeActions () {
       jsbridge.registerActions({
@@ -82,6 +97,21 @@ export default {
         setLocation: (loc) => {
           this.setLocation(loc)
         },
+
+        /// 陀螺仪
+        setOrientation: (data) => {
+          const now = Date.now()
+          if (now - this.lastUpdate < this.updateInterval) {
+            return
+          }
+          this.lastUpdate = now
+          if (!this.isEnabled) return
+          const azimuth = data.azimuth + this.calibrationOffset.azimuth
+          const altitude = data.altitude + this.calibrationOffset.altitude
+          const observed = this.azAltToObserved(azimuth, altitude)
+          this.stel.lookAt(observed, 0)
+        },
+
         // 设置时间
         setDateTime: (isoString) => {
           const m = Moment(isoString)
