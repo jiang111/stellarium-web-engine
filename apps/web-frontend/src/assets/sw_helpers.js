@@ -201,8 +201,12 @@ const swh = {
     }
     res = res.concat(ss.names.map(n => Vue.prototype.$stel.designationCleanup(n, flags)))
     // Remove duplicates, this can happen between * and V* catalogs
-    res = res.filter(function (v, i) { return res.indexOf(v) === i })
-    res = res.filter(function (v, i) { return !v.startsWith('CON ') })
+    res = res.filter(function (v, i) {
+      return res.indexOf(v) === i
+    })
+    res = res.filter(function (v, i) {
+      return !v.startsWith('CON ')
+    })
     return res
   },
 
@@ -360,9 +364,11 @@ const swh = {
     })
   },
 
-  setSweObjAsSelection: function (obj) {
+  setSweObjAsSelection: function (obj, lock = true) {
     const $stel = Vue.prototype.$stel
-    $stel.core.selection = obj
+    if (lock) {
+      $stel.core.selection = obj
+    }
     $stel.pointAndLock(obj)
   },
 

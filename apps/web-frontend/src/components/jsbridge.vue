@@ -69,7 +69,7 @@ export default {
             const m31Coords = this.$stel.createObj('coordinates', {
               pos: this.$stel.s2c(raRad, decRad)
             })
-            swh.setSweObjAsSelection(m31Coords)
+            swh.setSweObjAsSelection(m31Coords, ss.lock ?? true)
           }
         },
         // 设置位置
@@ -93,13 +93,17 @@ export default {
           const currentFov = this.$store.state.stel.fov * 180 / Math.PI
           this.$stel.zoomTo(currentFov * b * Math.PI / 180, 0.4)
           const that = this
-          this.zoomTimeout = setTimeout(_ => { that.zoomIn() }, 300)
+          this.zoomTimeout = setTimeout(_ => {
+            that.zoomIn()
+          }, 300)
         },
         zoomOut: function (b) {
           const currentFov = this.$store.state.stel.fov * 180 / Math.PI
           this.$stel.zoomTo(currentFov * b * Math.PI / 180, 0.6)
           const that = this
-          this.zoomTimeout = setTimeout(_ => { that.zoomOut() }, 200)
+          this.zoomTimeout = setTimeout(_ => {
+            that.zoomOut()
+          }, 200)
         },
         stopZoom: function () {
           if (this.zoomTimeout) {
