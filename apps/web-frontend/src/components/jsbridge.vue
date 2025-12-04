@@ -118,15 +118,15 @@ export default {
         /// 陀螺仪
         setOrientation: (data) => {
           const now = Date.now()
-          if (now - this.lastUpdate < this.updateInterval) {
+          if (now - this.lastUpdate < 16) {
             return
           }
           this.lastUpdate = now
-          if (!this.isEnabled) return
+          console.log('JSBridge setOrientation:', data)
           const azimuth = data.azimuth + this.calibrationOffset.azimuth
           const altitude = data.altitude + this.calibrationOffset.altitude
           const observed = this.azAltToObserved(azimuth, altitude)
-          this.stel.lookAt(observed, 0)
+          this.$stel.lookAt(observed, 0)
           this.updateState()
         },
 
