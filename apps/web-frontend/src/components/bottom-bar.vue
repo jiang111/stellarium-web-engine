@@ -113,17 +113,11 @@ import BottomButton from '@/components/bottom-button.vue'
 import DateTimePicker from '@/components/date-time-picker.vue'
 import Moment from 'moment'
 import swh from '@/assets/sw_helpers.js'
-import Vue from 'vue'
 
 export default {
   components: { BottomButton, DateTimePicker },
   data: function () {
-    return {
-      calibrationOffset: {
-        azimuth: 0,
-        altitude: 0
-      }
-    }
+    return {}
   },
   computed: {
     time: {
@@ -154,16 +148,6 @@ export default {
     }
   },
   methods: {
-    azAltToObserved (azimuth, altitude) {
-      const cosAlt = Math.cos(altitude)
-
-      // OBSERVED 坐标系: X=北, Y=东, Z=上
-      return [
-        Math.cos(azimuth) * cosAlt, // X = 北分量
-        Math.sin(azimuth) * cosAlt, // Y = 东分量
-        Math.sin(altitude) // Z = 上分量
-      ]
-    },
     // The MomentJS time in local time
     getLocalTime: function () {
       var d = new Date()
@@ -183,16 +167,40 @@ export default {
       const m31Coords = this.$stel.createObj('coordinates', {
         pos: this.$stel.s2c(raRad, decRad)
       })
-      swh.setSweObjAsSelection(m31Coords)
+      swh.setSweObjAsSelection(m31Coords, false)
     },
     setFullscreen: function () {
-      const azimuth = 0.1 + this.calibrationOffset.azimuth
-      const random = Math.random() * 0.1
-      const altitude = random
-      // this.calibrationOffset.azimuth = azimuth
-      const observed = this.azAltToObserved(azimuth, altitude)
-      const $stel = Vue.prototype.$stel
-      $stel.lookAt(observed, 0)
+      const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+      this.$stel.zoomTo(currentFov * 0.3 * Math.PI / 180, 0.4)
+      const that = this
+      this.zoomTimeout = setTimeout(_ => { that.setFullscreen() }, 300)
+
+      // this.gotoTarget(0.4123, 43.2688)
+      //
+      // setTimeout(() => {
+      //   const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+      //   this.$stel.zoomTo(currentFov * 0.9 * Math.PI / 180, 0.4)
+      //   const that = this
+      //   this.zoomTimeout = setTimeout(_ => {
+      //     that.zoomInButtonClicked()
+      //   }, 50)
+      //   setTimeout(() => {
+      //     const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+      //     this.$stel.zoomTo(currentFov * 0.5 * Math.PI / 180, 0.4)
+      //     const that = this
+      //     this.zoomTimeout = setTimeout(_ => {
+      //       that.zoomInButtonClicked()
+      //     }, 50)
+      //     setTimeout(() => {
+      //       const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+      //       this.$stel.zoomTo(currentFov * 0.3 * Math.PI / 180, 0.4)
+      //       const that = this
+      //       this.zoomTimeout = setTimeout(_ => {
+      //         that.zoomInButtonClicked()
+      //       }, 50)
+      //     }, 2000)
+      //   }, 2000)
+      // }, 2000)
     },
     setNightMode: function (b) {
       this.$store.commit('toggleBool', 'nightmode')

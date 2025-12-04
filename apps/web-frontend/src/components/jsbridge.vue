@@ -1,3 +1,6 @@
+<template>
+  <div style="display: none"></div>
+</template>
 <script>
 import Moment from 'moment'
 import jsbridge from '@/utils/jsbridge'
@@ -14,59 +17,77 @@ export default {
     }
   },
   mounted () {
-    // 注册所有可供 App 调用的功能
     this.registerBridgeActions()
   },
   methods: {
     azAltToObserved (azimuth, altitude) {
       const cosAlt = Math.cos(altitude)
-
-      // OBSERVED 坐标系: X=北, Y=东, Z=上
       return [
         Math.cos(azimuth) * cosAlt, // X = 北分量
         Math.sin(azimuth) * cosAlt, // Y = 东分量
         Math.sin(altitude) // Z = 上分量
       ]
     },
-    // 注册 JSBridge 动作
+    updateState () {
+      console.log('JSBridge getState called')
+      const data =
+        {
+          toggleConstellationLines: this.$store.state.stel.constellations.lines_visible,
+          toggleConstellationArt: this.$store.state.stel.constellations.images_visible,
+          toggleAtmosphere: this.$store.state.stel.atmosphere.visible,
+          toggleLandscape: this.$store.state.stel.landscapes.visible,
+          toggleAzimuthalGrid: this.$store.state.stel.lines.azimuthal.visible,
+          toggleEquatorialGrid: this.$store.state.stel.lines.equatorial_jnow.visible,
+          toggleEquatorialJ2000Grid: this.$store.state.stel.lines.equatorial.visible,
+          toggleNightMode: this.$store.state.nightmode,
+          currentTime: this.pickerDate,
+          location: this.$store.state.currentLocation
+        }
+      console.log('JSBridge getState returning', data)
+      jsbridge.postMessage('getState', data)
+    },
     registerBridgeActions () {
       jsbridge.registerActions({
         // 星座线
         toggleConstellationLines: (visible) => {
           this.$stel.core.constellations.lines_visible = visible
           this.$stel.core.constellations.labels_visible = visible
+          this.updateState()
         },
         // 星座图
         toggleConstellationArt: (visible) => {
           this.$stel.core.constellations.images_visible = visible
+          this.updateState()
         },
         // 大气层
         toggleAtmosphere: (visible) => {
           this.$stel.core.atmosphere.visible = visible
+          this.updateState()
         },
         // 地景
         toggleLandscape: (visible) => {
           this.$stel.core.landscapes.visible = visible
+          this.updateState()
         },
         // 地平网格
         toggleAzimuthalGrid: (visible) => {
           this.$stel.core.lines.azimuthal.visible = visible
+          this.updateState()
         },
         // 赤道网格
         toggleEquatorialGrid: (visible) => {
           this.$stel.core.lines.equatorial_jnow.visible = visible
+          this.updateState()
         },
         // 赤道 J2000 网格
         toggleEquatorialJ2000Grid: (visible) => {
           this.$stel.core.lines.equatorial.visible = visible
+          this.updateState()
         },
         // 夜间模式
         toggleNightMode: (enabled) => {
           this.setNightMode(enabled)
-        },
-        // 全屏
-        toggleFullscreen: (enabled) => {
-          this.setFullscreen(enabled)
+          this.updateState()
         },
         gotoAndLock: (ss) => {
           let obj = swh.skySource2SweObj(ss)
@@ -86,16 +107,12 @@ export default {
             })
             swh.setSweObjAsSelection(m31Coords, ss.lock ?? true)
           }
+          this.updateState()
         },
-        // 设置位置
-        // {
-        // "lat": 31.2304,
-        // "lng": 121.4737,
-        // "short_name": "Shanghai",
-        // "country": "China"
-        // }
         setLocation: (loc) => {
+          console.log('JSBridge setLocation:', loc)
           this.setLocation(loc)
+          this.updateState()
         },
 
         /// 陀螺仪
@@ -110,6 +127,7 @@ export default {
           const altitude = data.altitude + this.calibrationOffset.altitude
           const observed = this.azAltToObserved(azimuth, altitude)
           this.stel.lookAt(observed, 0)
+          this.updateState()
         },
 
         // 设置时间
@@ -118,45 +136,34 @@ export default {
           m.local()
           m.milliseconds(this.getLocalTime().milliseconds())
           this.$stel.core.observer.utc = m.toDate().getMJD()
+          this.updateState()
         },
-        zoomIn: function (b) {
+        zoomIn: (b) => {
           const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-          this.$stel.zoomTo(currentFov * b * Math.PI / 180, 0.4)
-          const that = this
+          this.$stel.zoomTo(currentFov * b.speed * Math.PI / 180, 0.4)
           this.zoomTimeout = setTimeout(_ => {
-            that.zoomIn()
-          }, 300)
+            this.zoomIn()
+          }, b.timeout)
+          this.updateState()
         },
-        zoomOut: function (b) {
+        zoomOut: (b) => {
           const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-          this.$stel.zoomTo(currentFov * b * Math.PI / 180, 0.6)
-          const that = this
+          this.$stel.zoomTo(currentFov * b.speed * Math.PI / 180, 0.6)
           this.zoomTimeout = setTimeout(_ => {
-            that.zoomOut()
-          }, 200)
+            this.zoomOut()
+          }, b.timeout)
+          this.updateState()
         },
-        stopZoom: function () {
+        stopZoom: () => {
           if (this.zoomTimeout) {
             clearTimeout(this.zoomTimeout)
             this.zoomTimeout = undefined
           }
+          this.updateState()
         },
         // 获取当前状态
         getState: () => {
-          return {
-            constellationLines: this.$store.state.stel.constellations.lines_visible,
-            constellationArt: this.$store.state.stel.constellations.images_visible,
-            atmosphere: this.$store.state.stel.atmosphere.visible,
-            landscape: this.$store.state.stel.landscapes.visible,
-            azimuthalGrid: this.$store.state.stel.lines.azimuthal.visible,
-            equatorialGrid: this.$store.state.stel.lines.equatorial_jnow.visible,
-            equatorialJ2000Grid: this.$store.state.stel.lines.equatorial.visible,
-            deepSkyObjects: this.$store.state.stel.dsos.visible,
-            nightMode: this.$store.state.nightmode,
-            fullscreen: this.$store.state.fullscreen,
-            currentTime: this.pickerDate,
-            location: this.$store.state.currentLocation
-          }
+          this.updateState()
         }
       })
     },

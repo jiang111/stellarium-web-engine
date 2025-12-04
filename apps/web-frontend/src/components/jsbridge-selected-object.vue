@@ -1,3 +1,6 @@
+<template>
+  <div style="display: none"></div>
+</template>
 <script>
 import jsbridge from '@/utils/jsbridge'
 
