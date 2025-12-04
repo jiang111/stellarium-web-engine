@@ -171,17 +171,31 @@ export default {
     },
     setFullscreen: function (b) {
       this.gotoTarget(0.7123, 41.2688)
+
       setTimeout(() => {
-        this.gotoTarget(5.5881, -5.3900)
+        const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+        this.$stel.zoomTo(currentFov * 0.9 * Math.PI / 180, 0.4)
+        const that = this
+        this.zoomTimeout = setTimeout(_ => {
+          that.zoomInButtonClicked()
+        }, 50)
         setTimeout(() => {
-          this.gotoTarget(8.6703, 19.6211)
+          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+          this.$stel.zoomTo(currentFov * 0.5 * Math.PI / 180, 0.4)
+          const that = this
+          this.zoomTimeout = setTimeout(_ => {
+            that.zoomInButtonClicked()
+          }, 50)
+          setTimeout(() => {
+            const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+            this.$stel.zoomTo(currentFov * 0.1 * Math.PI / 180, 0.4)
+            const that = this
+            this.zoomTimeout = setTimeout(_ => {
+              that.zoomInButtonClicked()
+            }, 50)
+          }, 2000)
         }, 2000)
       }, 2000)
-
-      // this.$fullscreen.toggle(document.body, {
-      //   wrap: false,
-      //   callback: this.onFullscreenChange
-      // })
     },
     setNightMode: function (b) {
       this.$store.commit('toggleBool', 'nightmode')

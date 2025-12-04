@@ -45,10 +45,6 @@ export default {
         toggleEquatorialJ2000Grid: (visible) => {
           this.$stel.core.lines.equatorial.visible = visible
         },
-        // 深空天体
-        toggleDeepSkyObjects: (visible) => {
-          this.$stel.core.dsos.visible = visible
-        },
         // 夜间模式
         toggleNightMode: (enabled) => {
           this.setNightMode(enabled)
@@ -57,19 +53,24 @@ export default {
         toggleFullscreen: (enabled) => {
           this.setFullscreen(enabled)
         },
-        gotoAndLock: (obj) => {
-          const ra = obj.ra
-          const dec = obj.dec
-          const raDeg = ra * 15
-          const decDeg = dec
+        gotoAndLock: (ss) => {
+          let obj = swh.skySource2SweObj(ss)
+          if (!obj) {
+            obj = this.$stel.createObj(ss.model, ss)
+            this.$selectionLayer.add(obj)
+            swh.setSweObjAsSelection(obj)
+          } else {
+            const raDeg = ss.model_data.ra
+            const decDeg = ss.model_data.dec
 
-          const raRad = raDeg * Math.PI / 180
-          const decRad = decDeg * Math.PI / 180
+            const raRad = raDeg * Math.PI / 180
+            const decRad = decDeg * Math.PI / 180
 
-          const m31Coords = this.$stel.createObj('coordinates', {
-            pos: this.$stel.s2c(raRad, decRad)
-          })
-          swh.setSweObjAsSelection(m31Coords)
+            const m31Coords = this.$stel.createObj('coordinates', {
+              pos: this.$stel.s2c(raRad, decRad)
+            })
+            swh.setSweObjAsSelection(m31Coords)
+          }
         },
         // 设置位置
         // {
@@ -87,6 +88,24 @@ export default {
           m.local()
           m.milliseconds(this.getLocalTime().milliseconds())
           this.$stel.core.observer.utc = m.toDate().getMJD()
+        },
+        zoomIn: function (b) {
+          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+          this.$stel.zoomTo(currentFov * b * Math.PI / 180, 0.4)
+          const that = this
+          this.zoomTimeout = setTimeout(_ => { that.zoomIn() }, 300)
+        },
+        zoomOut: function (b) {
+          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
+          this.$stel.zoomTo(currentFov * b * Math.PI / 180, 0.6)
+          const that = this
+          this.zoomTimeout = setTimeout(_ => { that.zoomOut() }, 200)
+        },
+        stopZoom: function () {
+          if (this.zoomTimeout) {
+            clearTimeout(this.zoomTimeout)
+            this.zoomTimeout = undefined
+          }
         },
         // 获取当前状态
         getState: () => {

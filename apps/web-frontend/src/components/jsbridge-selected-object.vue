@@ -60,7 +60,7 @@ export default {
     sendSelectedObjectData () {
       const newObject = this.selectedObject
       if (!newObject) return
-
+      const that = this
       const obj = this.$stel.core.selection
       const result = {
         name: newObject.names || [],
@@ -69,18 +69,39 @@ export default {
         types: newObject.types || [],
         model_data: newObject.model_data || {}
       }
-
+      const formatInt = function (num, padLen) {
+        const pad = new Array(1 + padLen).join('0')
+        return (pad + num).slice(-pad.length)
+      }
+      const formatRA = function (a) {
+        const raf = that.$stel.a2tf(a, 1)
+        const hour = raf.hours
+        const minute = raf.minutes * 100 / 60
+        const second = raf.seconds * 100 / 3600
+        return hour + minute / 100 + second / 10000
+      }
+      const formatDec = function (a) {
+        const raf = that.$stel.a2af(a, 1)
+        var result = raf.sign + formatInt(raf.degrees, 2) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
+        return parseFloat(result)
+      }
+      const formatAz = function (a) {
+        const raf = that.$stel.a2af(a, 1)
+        var result = formatInt(raf.degrees < 0 ? raf.degrees + 360 : raf.degrees, 3) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
+        return parseFloat(result)
+      }
       // 获取 Ra/Dec (赤经赤纬)
       if (obj) {
-        const posCIRS = this.$stel.convertFrame(this.$stel.core.observer, 'ICRF', 'JNOW', obj.getInfo('radec'))
-        const radecCIRS = this.$stel.c2s(posCIRS)
-        result.ra = this.$stel.anp(radecCIRS[0])
-        result.dec = this.$stel.anpm(radecCIRS[1])
+        const radecCIRS = this.$stel.c2s(obj.getInfo('radec'))
+        const raCIRS = this.$stel.anp(radecCIRS[0])
+        const decCIRS = this.$stel.anpm(radecCIRS[1])
+        result.ra = formatRA(raCIRS)
+        result.dec = formatDec(decCIRS)
 
         // 获取 Az/Alt (方位角/高度角)
         const azalt = this.$stel.c2s(this.$stel.convertFrame(this.$stel.core.observer, 'ICRF', 'OBSERVED', obj.getInfo('radec')))
-        result.az = this.$stel.anp(azalt[0])
-        result.alt = this.$stel.anpm(azalt[1])
+        result.az = formatAz(this.$stel.anp(azalt[0]))
+        result.alt = formatDec(this.$stel.anpm(azalt[1]))
 
         // 获取 Magnitude (星等)
         const vmag = obj.getInfo('vmag')
@@ -141,35 +162,7 @@ export default {
     // 注册 JSBridge 动作
     registerBridgeActions () {
       jsbridge.registerActions({
-        // 缩小
-        zoomInButtonEnabled: function () {
-          if (!this.$store.state.stel.lock || !this.selectedObject) return false
-          return true
-        },
-        // 放大
-        zoomOutButtonEnabled: function () {
-          if (!this.$store.state.stel.lock || !this.selectedObject) return false
-          return true
-        },
-        zoomInButtonClicked: function () {
-          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-          this.$stel.zoomTo(currentFov * 0.3 * Math.PI / 180, 0.4)
-          const that = this
-          this.zoomTimeout = setTimeout(_ => { that.zoomInButtonClicked() }, 300)
-        },
-        zoomOutButtonClicked: function () {
-          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-          this.$stel.zoomTo(currentFov * 3 * Math.PI / 180, 0.6)
-          const that = this
-          this.zoomTimeout = setTimeout(_ => { that.zoomOutButtonClicked() }, 200)
-        },
-        stopZoom: function () {
-          if (this.zoomTimeout) {
-            clearTimeout(this.zoomTimeout)
-            this.zoomTimeout = undefined
-          }
-        },
-        // 强制当前天体居中
+        // 强制当前选中的天体居中
         lockToSelection: function () {
           if (this.$stel.core.selection) {
             this.$stel.pointAndLock(this.$stel.core.selection, 0.5)
@@ -177,23 +170,6 @@ export default {
         },
         unselect: function () {
           this.$stel.core.selection = 0
-        },
-        // 获取当前状态
-        getState: () => {
-          return {
-            constellationLines: this.$store.state.stel.constellations.lines_visible,
-            constellationArt: this.$store.state.stel.constellations.images_visible,
-            atmosphere: this.$store.state.stel.atmosphere.visible,
-            landscape: this.$store.state.stel.landscapes.visible,
-            azimuthalGrid: this.$store.state.stel.lines.azimuthal.visible,
-            equatorialGrid: this.$store.state.stel.lines.equatorial_jnow.visible,
-            equatorialJ2000Grid: this.$store.state.stel.lines.equatorial.visible,
-            deepSkyObjects: this.$store.state.stel.dsos.visible,
-            nightMode: this.$store.state.nightmode,
-            fullscreen: this.$store.state.fullscreen,
-            currentTime: this.pickerDate,
-            location: this.$store.state.currentLocation
-          }
         }
       })
     }
