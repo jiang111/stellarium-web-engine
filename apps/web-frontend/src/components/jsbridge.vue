@@ -43,39 +43,6 @@ export default {
       while (diff < -Math.PI) diff += 2 * Math.PI
       return diff
     },
-    averageAngles (angles) {
-      let sumSin = 0
-      let sumCos = 0
-
-      for (const angle of angles) {
-        sumSin += Math.sin(angle)
-        sumCos += Math.cos(angle)
-      }
-
-      return Math.atan2(sumSin / angles.length, sumCos / angles.length)
-    },
-    applyDeadZone (newValue, lastValue, threshold) {
-      const diff = this.angleDiff(newValue, lastValue)
-      if (Math.abs(diff) < threshold) {
-        return lastValue
-      }
-      return newValue
-    },
-    movingAverage (type, value) {
-      const buffer = this.buffer[type]
-      buffer.push(value)
-
-      if (buffer.length > this.buffer.maxSize) {
-        buffer.shift()
-      }
-
-      // 计算平均值（考虑角度循环性）
-      if (type === 'azimuth') {
-        return this.averageAngles(buffer)
-      } else {
-        return buffer.reduce((a, b) => a + b, 0) / buffer.length
-      }
-    },
     lerpAngle (from, to, t) {
       const diff = this.angleDiff(to, from)
       return from + diff * t
@@ -187,57 +154,11 @@ export default {
           this.setLocation(loc)
           this.updateState()
         },
-
-        /// 陀螺仪
-        setOrientation:
-          (data) => {
-            const now = Date.now()
-            if (now - this.lastUpdate < this.updateInterval) {
-              return
-            }
-            this.lastUpdate = now
-
-            // 接收 Flutter 数据
-            let azimuth = data.azimuth
-            const altitude = data.altitude
-
-            // 当俯仰角接近垂直时，保持上次稳定的方位角
-            const pitchWeight = Math.abs(Math.cos(altitude))
-            if (pitchWeight < 0.3) {
-              azimuth = this.lastStableAzimuth
-            } else {
-              this.lastStableAzimuth = azimuth
-            }
-
-            // 更新目标值
-            this.smoothing.target.azimuth = azimuth
-            this.smoothing.target.altitude = altitude
-
-            if (this.smoothing.enabled) {
-              // 线性插值（LERP）到目标值
-              const factor = this.smoothing.factor
-
-              this.smoothing.current.azimuth = this.lerpAngle(
-                this.smoothing.current.azimuth,
-                this.smoothing.target.azimuth,
-                factor
-              )
-
-              this.smoothing.current.altitude +=
-                (this.smoothing.target.altitude - this.smoothing.current.altitude) * factor
-              const observed = this.azAltToObserved(azimuth, altitude)
-              this.$stel.lookAt(observed, 0)
-              this.updateState()
-            }
-          },
-
-        // 设置时间
         setDateTime:
           (million) => {
             const isoString = new Date(million).toISOString()
             const m = Moment(isoString)
             m.local()
-            m.milliseconds(this.getLocalTime().milliseconds())
             this.$stel.core.observer.utc = m.toDate().getMJD()
             this.updateState()
           },
@@ -271,15 +192,86 @@ export default {
         getState:
           () => {
             this.updateState()
+          },
+        drawLine: (ra1, dec1, ra2, dec2) => {
+          const {
+            segments = 50, // 插值段数
+            color = '#ff0000',
+            width = 2,
+            opacity = 1.0,
+            id = 'arc-' + Date.now()
+          } = {}
+
+          // 转换为弧度和笛卡尔坐标
+          const toRad = Math.PI / 180
+          const p1 = this.$stel.s2c(ra1 * toRad, dec1 * toRad)
+          const p2 = this.$stel.s2c(ra2 * toRad, dec2 * toRad)
+
+          // 计算角距离
+          const dot = p1[0] * p2[0] + p1[1] * p2[1] + p1[2] * p2[2]
+          const angle = Math.acos(Math.max(-1, Math.min(1, dot)))
+
+          // 插值生成大圆弧上的点
+          const points = []
+          for (let i = 0; i <= segments; i++) {
+            const t = i / segments
+            const sin0 = Math.sin((1 - t) * angle) / Math.sin(angle)
+            const sin1 = Math.sin(t * angle) / Math.sin(angle)
+
+            // 球面线性插值 (SLERP)
+            const x = sin0 * p1[0] + sin1 * p2[0]
+            const y = sin0 * p1[1] + sin1 * p2[1]
+            const z = sin0 * p1[2] + sin1 * p2[2]
+
+            // 转换回球面坐标
+            const [ra, dec] = this.$stel.c2s([x, y, z])
+            points.push([ra * 180 / Math.PI, dec * 180 / Math.PI])
           }
+
+          // 创建 GeoJSON
+          const geojsonData = {
+            type: 'FeatureCollection',
+            features: [{
+              type: 'Feature',
+              properties: {
+                stroke: color,
+                'stroke-width': width,
+                'stroke-opacity': opacity
+              },
+              geometry: {
+                type: 'LineString',
+                coordinates: points
+              }
+            }]
+          }
+
+          // 创建对象
+          let layer = this.$stel.getObj('custom-lines-layer')
+          if (!layer) {
+            layer = this.$stel.createLayer({
+              id: 'custom-lines-layer',
+              z: 40,
+              visible: true
+            })
+          }
+
+          const arcObj = this.$stel.createObj('geojson', {
+            id: id,
+            data: geojsonData
+          })
+
+          layer.add(arcObj)
+
+          return arcObj
+        }
       })
     },
     getLocalTime: function () {
       var d = new Date()
       d.setMJD(this.$store.state.stel.observer.utc)
       const m = Moment(d)
-      m.local()
-      return m
+      // 转换成毫秒值
+      return m.utc().toDate().getTime()
     },
     setLocation: function (loc) {
       this.$store.commit('setCurrentLocation', loc)

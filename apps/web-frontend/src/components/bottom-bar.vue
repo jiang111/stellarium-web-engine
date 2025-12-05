@@ -170,37 +170,77 @@ export default {
       swh.setSweObjAsSelection(m31Coords, false)
     },
     setFullscreen: function () {
-      const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-      this.$stel.zoomTo(currentFov * 0.3 * Math.PI / 180, 0.4)
-      const that = this
-      this.zoomTimeout = setTimeout(_ => { that.setFullscreen() }, 300)
+      const {
+        segments = 50, // 插值段数
+        color = '#ff0000',
+        width = 2,
+        opacity = 1.0,
+        id = 'arc-' + Date.now()
+      } = {}
 
-      // this.gotoTarget(0.4123, 43.2688)
-      //
-      // setTimeout(() => {
-      //   const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-      //   this.$stel.zoomTo(currentFov * 0.9 * Math.PI / 180, 0.4)
-      //   const that = this
-      //   this.zoomTimeout = setTimeout(_ => {
-      //     that.zoomInButtonClicked()
-      //   }, 50)
-      //   setTimeout(() => {
-      //     const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-      //     this.$stel.zoomTo(currentFov * 0.5 * Math.PI / 180, 0.4)
-      //     const that = this
-      //     this.zoomTimeout = setTimeout(_ => {
-      //       that.zoomInButtonClicked()
-      //     }, 50)
-      //     setTimeout(() => {
-      //       const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-      //       this.$stel.zoomTo(currentFov * 0.3 * Math.PI / 180, 0.4)
-      //       const that = this
-      //       this.zoomTimeout = setTimeout(_ => {
-      //         that.zoomInButtonClicked()
-      //       }, 50)
-      //     }, 2000)
-      //   }, 2000)
-      // }, 2000)
+      const ra1 = 10.6847083 // 起点赤经 (小时)
+      const dec1 = 41.2690650 // 起点赤纬 (度)
+      const ra2 = 83.8220833 // 终点赤经 (小时
+      const dec2 = -5.3911111 // 终点赤纬 (度)
+      // 转换为弧度和笛卡尔坐标
+      const toRad = Math.PI / 180
+      const p1 = this.$stel.s2c(ra1 * toRad, dec1 * toRad)
+      const p2 = this.$stel.s2c(ra2 * toRad, dec2 * toRad)
+
+      // 计算角距离
+      const dot = p1[0] * p2[0] + p1[1] * p2[1] + p1[2] * p2[2]
+      const angle = Math.acos(Math.max(-1, Math.min(1, dot)))
+
+      // 插值生成大圆弧上的点
+      const points = []
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments
+        const sin0 = Math.sin((1 - t) * angle) / Math.sin(angle)
+        const sin1 = Math.sin(t * angle) / Math.sin(angle)
+
+        // 球面线性插值 (SLERP)
+        const x = sin0 * p1[0] + sin1 * p2[0]
+        const y = sin0 * p1[1] + sin1 * p2[1]
+        const z = sin0 * p1[2] + sin1 * p2[2]
+
+        // 转换回球面坐标
+        const [ra, dec] = this.$stel.c2s([x, y, z])
+        points.push([ra * 180 / Math.PI, dec * 180 / Math.PI])
+      }
+
+      // 创建 GeoJSON
+      const geojsonData = {
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          properties: {
+            stroke: color,
+            'stroke-width': width,
+            'stroke-opacity': opacity
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: points
+          }
+        }]
+      }
+
+      // 创建对象
+      let layer = this.$stel.getObj('custom-lines-layer')
+      if (!layer) {
+        layer = this.$stel.createLayer({
+          id: 'custom-lines-layer',
+          z: 40,
+          visible: true
+        })
+      }
+
+      const arcObj = this.$stel.createObj('geojson', {
+        id: id,
+        data: geojsonData
+      })
+
+      layer.add(arcObj)
     },
     setNightMode: function (b) {
       this.$store.commit('toggleBool', 'nightmode')
