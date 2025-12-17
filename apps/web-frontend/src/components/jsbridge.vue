@@ -59,9 +59,10 @@ export default {
           toggleEquatorialJ2000Grid: this.$store.state.stel.lines.equatorial.visible,
           toggleNightMode: this.$store.state.nightmode,
           currentTime: this.getLocalTime(),
-          location: this.$store.state.currentLocation
+          location: this.$store.state.currentLocation,
+          speedTime: this.$store.state.stel.time_speed,
+          fov: this.$store.state.stel.fov * 180 / Math.PI
         }
-      console.log('JSBridge getState returning', data)
       jsbridge.postMessage('getState', data)
     },
     registerBridgeActions () {
@@ -149,6 +150,10 @@ export default {
         unselect: () => {
           this.$stel.core.selection = 0
         },
+        updateFov: (fovDeg) => {
+          this.$stel.zoomTo(fovDeg * Math.PI / 180, 0.5)
+          this.updateState()
+        },
         setLocation: (loc) => {
           console.log('JSBridge setLocation:', loc)
           this.setLocation(loc)
@@ -160,6 +165,11 @@ export default {
             const m = Moment(isoString)
             m.local()
             this.$stel.core.observer.utc = m.toDate().getMJD()
+            this.updateState()
+          },
+        speedTime:
+          (speed) => {
+            this.$stel.core.time_speed = speed
             this.updateState()
           },
         zoomIn:
@@ -193,7 +203,7 @@ export default {
           () => {
             this.updateState()
           },
-        drawLine: (ra1, dec1, ra2, dec2) => {
+        drawLine: (data) => {
           const {
             segments = 50, // 插值段数
             color = '#ff0000',
@@ -204,8 +214,8 @@ export default {
 
           // 转换为弧度和笛卡尔坐标
           const toRad = Math.PI / 180
-          const p1 = this.$stel.s2c(ra1 * toRad, dec1 * toRad)
-          const p2 = this.$stel.s2c(ra2 * toRad, dec2 * toRad)
+          const p1 = this.$stel.s2c(data.ra1 * toRad, data.dec1 * toRad)
+          const p2 = this.$stel.s2c(data.ra2 * toRad, data.dec2 * toRad)
 
           // 计算角距离
           const dot = p1[0] * p2[0] + p1[1] * p2[1] + p1[2] * p2[2]
@@ -274,7 +284,17 @@ export default {
       return m.utc().toDate().getTime()
     },
     setLocation: function (loc) {
-      this.$store.commit('setCurrentLocation', loc)
+      // 确保 loc 包含必要字段
+      const location = {
+        short_name: loc.short_name || 'Unknown',
+        country: loc.country || 'Unknown',
+        street_address: loc.street_address || '',
+        lat: Number(loc.lat),
+        lng: Number(loc.lng),
+        alt: Number(loc.alt) || 0,
+        accuracy: Number(loc.accuracy) || 1
+      }
+      this.$store.commit('setCurrentLocation', location)
     },
     setFullscreen: function (b) {
       this.$fullscreen.toggle(document.body, {

@@ -70,7 +70,7 @@ const createStore = () => {
         accuracy: 5000
       },
 
-      useAutoLocation: true
+      useAutoLocation: false
     },
     mutations: {
       replaceStelWebEngine (state, newTree) {

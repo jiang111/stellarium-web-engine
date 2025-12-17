@@ -229,9 +229,9 @@ export default {
       try {
         swh.initStelWebEngine(that.$store, f.default, that.$refs.stelCanvas, function () {
           // Start auto location detection (even if we don't use it)
-          swh.getGeolocation().then(p => swh.geoCodePosition(p, that)).then((loc) => {
-            that.$store.commit('setAutoDetectedLocation', loc)
-          }, (error) => { console.log(error) })
+          // swh.getGeolocation().then(p => swh.geoCodePosition(p, that)).then((loc) => {
+          //   that.$store.commit('setAutoDetectedLocation', loc)
+          // }, (error) => { console.log(error) })
 
           that.$stel.setFont('regular', process.env.BASE_URL + 'fonts/Roboto-Regular.ttf', 1.38)
           that.$stel.setFont('bold', process.env.BASE_URL + 'fonts/Roboto-Bold.ttf', 1.38)
