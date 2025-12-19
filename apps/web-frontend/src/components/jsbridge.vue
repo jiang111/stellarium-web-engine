@@ -54,6 +54,8 @@ export default {
           toggleConstellationArt: this.$store.state.stel.constellations.images_visible,
           toggleAtmosphere: this.$store.state.stel.atmosphere.visible,
           toggleLandscape: this.$store.state.stel.landscapes.visible,
+          toogleMilkyway: this.$store.state.stel.milkyway.visible,
+          toggleMeridian: this.$store.state.stel.lines.meridian.visible,
           toggleAzimuthalGrid: this.$store.state.stel.lines.azimuthal.visible,
           toggleEquatorialGrid: this.$store.state.stel.lines.equatorial_jnow.visible,
           toggleEquatorialJ2000Grid: this.$store.state.stel.lines.equatorial.visible,
@@ -71,6 +73,14 @@ export default {
         toggleConstellationLines: (visible) => {
           this.$stel.core.constellations.lines_visible = visible
           this.$stel.core.constellations.labels_visible = visible
+          this.updateState()
+        },
+        toogleMilkyway: (visible) => {
+          this.$stel.core.milkyway.visible = visible
+          this.updateState()
+        },
+        toggleMeridian: (visible) => {
+          this.$stel.core.lines.meridian.visible = visible
           this.updateState()
         },
         // 星座图
