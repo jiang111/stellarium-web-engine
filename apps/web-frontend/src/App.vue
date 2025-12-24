@@ -254,7 +254,9 @@ export default {
             // Allow to specify a custom path for sky culture data
             if (that.$route.query.sc) {
               const key = that.$route.query.sc.substring(that.$route.query.sc.lastIndexOf('/') + 1)
-              core.skycultures.addDataSource({ url: that.$route.query.sc, key: key })
+              // core.skycultures.addDataSource({ url: that.$route.query.sc, key: key })
+              const url = process.env.BASE_URL + `skydata/skycultures/${key}`
+              core.skycultures.addDataSource({ url: url, key: key })
               core.skycultures.current_id = key
             } else {
               core.skycultures.addDataSource({ url: process.env.BASE_URL + 'skydata/skycultures/western', key: 'western' })

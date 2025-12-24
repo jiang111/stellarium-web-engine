@@ -79,6 +79,7 @@ export default {
       const that = this
       const obj = this.$stel.core.selection
       const result = {
+        title: swh.namesForSkySource(this.selectedObject, 26),
         name: newObject.names || [],
         culturalNames: newObject.culturalNames || [],
         model: newObject.model || '',

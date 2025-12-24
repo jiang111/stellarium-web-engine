@@ -101,6 +101,8 @@ export default {
       return this.$store.state.stel && this.$store.state.stel.selection ? this.$store.state.stel.selection : undefined
     },
     title: function () {
+      console.log('selected title')
+      console.log(this.selectedObject ? this.otherNames[0] : 'Selection')
       return this.selectedObject ? this.otherNames[0] : 'Selection'
     },
     otherNames: function () {
