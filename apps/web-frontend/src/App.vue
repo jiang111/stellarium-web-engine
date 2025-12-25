@@ -233,8 +233,9 @@ export default {
           //   that.$store.commit('setAutoDetectedLocation', loc)
           // }, (error) => { console.log(error) })
 
-          that.$stel.setFont('regular', process.env.BASE_URL + 'fonts/Roboto-Regular.ttf', 1.38)
-          that.$stel.setFont('bold', process.env.BASE_URL + 'fonts/Roboto-Bold.ttf', 1.38)
+          that.$stel.setFont('regular', process.env.BASE_URL + 'fonts/AlibabaPuHuiTi-3-55-Regular.ttf', 1.38)
+          that.$stel.setFont('bold', process.env.BASE_URL + 'fonts/AlibabaPuHuiTi-3-85-Bold.ttf', 1.38)
+
           that.$stel.core.constellations.show_only_pointed = false
 
           that.setStateFromQueryArgs()
@@ -308,6 +309,8 @@ html, body, #app {
   height: 100%;
   padding: 0!important;
   font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Noto Sans', sans-serif;
+
 }
 
 .fullscreen {

@@ -161,6 +161,8 @@ export default {
           this.$stel.core.selection = 0
         },
         updateFov: (fovDeg) => {
+          if (fovDeg < 0.01) fovDeg = 0.01
+          if (fovDeg > 185) fovDeg = 185
           this.$stel.zoomTo(fovDeg * Math.PI / 180, 0.5)
           this.updateState()
         },
