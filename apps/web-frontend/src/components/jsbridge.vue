@@ -118,8 +118,34 @@ export default {
           this.setNightMode(enabled)
           this.updateState()
         },
+        gotoByAltAndAz: (ss) => {
+          /// {"alt":45,"az":23}
+          /// goto {"alt":45,"az":23}
+          // 用户方位角: 0=北, 90=东, 180=南, 270=西 (从北顺时针)
+          // Stellarium OBSERVED 坐标系 (根据 c2s 的逆向工程):
+          //   X 轴指向南方 (az=180)
+          //   Y 轴指向西方 (az=270)
+          //   Z 轴指向天顶 (alt=90)
+          // 从用户 az/alt 转换到 OBSERVED 笛卡尔坐标:
+          //   x = -cos(az) * cos(alt)  (北方是-X)
+          //   y = -sin(az) * cos(alt)  (东方是-Y)
+          //   z = sin(alt)
+          const azRad = ss.az * Math.PI / 180
+          const altRad = ss.alt * Math.PI / 180
+          const cosAlt = Math.cos(altRad)
+          const observed = [
+            -Math.cos(azRad) * cosAlt, // X: 南方为正，北方为负
+            -Math.sin(azRad) * cosAlt, // Y: 西方为正，东方为负
+            Math.sin(altRad) // Z: 天顶为正
+          ]
+          // 将地平坐标系 (OBSERVED) 转换为 ICRF 坐标系
+          const obs = this.$stel.core.observer
+          const icrf = this.$stel.convertFrame(obs, 'OBSERVED', 'ICRF', observed)
+          // 使用 lookAt 直接指向该位置
+          this.$stel.lookAt(icrf, 0)
+        },
         gotoAndLock: (ss) => {
-          console.log('JSBridge gotoAndLock:', ss)
+          // console.log('JSBridge gotoAndLock:', ss)
           if (ss.model === 'custom') {
             const raDeg = ss.model_data.ra
             const decDeg = ss.model_data.dec
@@ -214,78 +240,7 @@ export default {
         getState:
           () => {
             this.updateState()
-          },
-        drawLine: (data) => {
-          const {
-            segments = 50, // 插值段数
-            color = '#ff0000',
-            width = 2,
-            opacity = 1.0,
-            id = 'arc-' + Date.now()
-          } = {}
-
-          // 转换为弧度和笛卡尔坐标
-          const toRad = Math.PI / 180
-          const p1 = this.$stel.s2c(data.ra1 * toRad, data.dec1 * toRad)
-          const p2 = this.$stel.s2c(data.ra2 * toRad, data.dec2 * toRad)
-
-          // 计算角距离
-          const dot = p1[0] * p2[0] + p1[1] * p2[1] + p1[2] * p2[2]
-          const angle = Math.acos(Math.max(-1, Math.min(1, dot)))
-
-          // 插值生成大圆弧上的点
-          const points = []
-          for (let i = 0; i <= segments; i++) {
-            const t = i / segments
-            const sin0 = Math.sin((1 - t) * angle) / Math.sin(angle)
-            const sin1 = Math.sin(t * angle) / Math.sin(angle)
-
-            // 球面线性插值 (SLERP)
-            const x = sin0 * p1[0] + sin1 * p2[0]
-            const y = sin0 * p1[1] + sin1 * p2[1]
-            const z = sin0 * p1[2] + sin1 * p2[2]
-
-            // 转换回球面坐标
-            const [ra, dec] = this.$stel.c2s([x, y, z])
-            points.push([ra * 180 / Math.PI, dec * 180 / Math.PI])
           }
-
-          // 创建 GeoJSON
-          const geojsonData = {
-            type: 'FeatureCollection',
-            features: [{
-              type: 'Feature',
-              properties: {
-                stroke: color,
-                'stroke-width': width,
-                'stroke-opacity': opacity
-              },
-              geometry: {
-                type: 'LineString',
-                coordinates: points
-              }
-            }]
-          }
-
-          // 创建对象
-          let layer = this.$stel.getObj('custom-lines-layer')
-          if (!layer) {
-            layer = this.$stel.createLayer({
-              id: 'custom-lines-layer',
-              z: 40,
-              visible: true
-            })
-          }
-
-          const arcObj = this.$stel.createObj('geojson', {
-            id: id,
-            data: geojsonData
-          })
-
-          layer.add(arcObj)
-
-          return arcObj
-        }
       })
     },
     getLocalTime: function () {
