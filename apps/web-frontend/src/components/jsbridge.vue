@@ -119,16 +119,8 @@ export default {
           this.updateState()
         },
         gotoByAltAndAz: (ss) => {
-          // 直接设置 observer.yaw (方位角) 和 observer.pitch (高度角)
-          //
-          // 用户约定: az=0 表示北, az=90 表示东 (顺时针)
-          // 需要反转方位角方向以使星图跟随手机移动
-          const azRad = -ss.az * Math.PI / 180
-          const altRad = ss.alt * Math.PI / 180
-
-          // 直接设置视角方向
-          this.$stel.core.observer.yaw = azRad
-          this.$stel.core.observer.pitch = altRad
+          this.$stel.core.observer.yaw = -1 * ss.az * 0.017453292519943295
+          this.$stel.core.observer.pitch = ss.alt * 0.017453292519943295
         },
         gotoAndLock: (ss) => {
           // console.log('JSBridge gotoAndLock:', ss)
