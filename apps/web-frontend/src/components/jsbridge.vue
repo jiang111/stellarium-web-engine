@@ -119,30 +119,16 @@ export default {
           this.updateState()
         },
         gotoByAltAndAz: (ss) => {
-          /// {"alt":45,"az":23}
-          /// goto {"alt":45,"az":23}
-          // 用户方位角: 0=北, 90=东, 180=南, 270=西 (从北顺时针)
-          // Stellarium OBSERVED 坐标系 (根据 c2s 的逆向工程):
-          //   X 轴指向南方 (az=180)
-          //   Y 轴指向西方 (az=270)
-          //   Z 轴指向天顶 (alt=90)
-          // 从用户 az/alt 转换到 OBSERVED 笛卡尔坐标:
-          //   x = -cos(az) * cos(alt)  (北方是-X)
-          //   y = -sin(az) * cos(alt)  (东方是-Y)
-          //   z = sin(alt)
-          const azRad = ss.az * Math.PI / 180
+          // 直接设置 observer.yaw (方位角) 和 observer.pitch (高度角)
+          //
+          // 用户约定: az=0 表示北, az=90 表示东 (顺时针)
+          // 需要反转方位角方向以使星图跟随手机移动
+          const azRad = -ss.az * Math.PI / 180
           const altRad = ss.alt * Math.PI / 180
-          const cosAlt = Math.cos(altRad)
-          const observed = [
-            -Math.cos(azRad) * cosAlt, // X: 南方为正，北方为负
-            -Math.sin(azRad) * cosAlt, // Y: 西方为正，东方为负
-            Math.sin(altRad) // Z: 天顶为正
-          ]
-          // 将地平坐标系 (OBSERVED) 转换为 ICRF 坐标系
-          const obs = this.$stel.core.observer
-          const icrf = this.$stel.convertFrame(obs, 'OBSERVED', 'ICRF', observed)
-          // 使用 lookAt 直接指向该位置
-          this.$stel.lookAt(icrf, 0)
+
+          // 直接设置视角方向
+          this.$stel.core.observer.yaw = azRad
+          this.$stel.core.observer.pitch = altRad
         },
         gotoAndLock: (ss) => {
           // console.log('JSBridge gotoAndLock:', ss)
