@@ -236,7 +236,8 @@ export default {
           that.$stel.setFont('regular', process.env.BASE_URL + 'fonts/AlibabaPuHuiTi-3-55-Regular.ttf', 1.38)
           that.$stel.setFont('bold', process.env.BASE_URL + 'fonts/AlibabaPuHuiTi-3-85-Bold.ttf', 1.38)
 
-          that.$stel.core.constellations.show_only_pointed = false
+          /// 只有当挪动到指定区域的时候，才显示这个区域的图像
+          that.$stel.core.constellations.show_only_pointed = true
 
           that.setStateFromQueryArgs()
           that.guiComponent = 'Gui'
