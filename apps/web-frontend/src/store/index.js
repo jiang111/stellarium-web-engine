@@ -49,6 +49,7 @@ const createStore = () => {
       fullscreen: false,
       nightmode: false,
       wasmSupport: true,
+      arMode: false,
 
       autoDetectedLocation: {
         short_name: 'Unknown',
@@ -79,6 +80,9 @@ const createStore = () => {
       },
       toggleBool (state, varName) {
         _.set(state, varName, !_.get(state, varName))
+      },
+      setARMode (state, newValue) {
+        state.arMode = newValue
       },
       setValue (state, { varName, newValue }) {
         _.set(state, varName, newValue)

@@ -241,6 +241,41 @@ export default {
 
           that.setStateFromQueryArgs()
           that.guiComponent = 'Gui'
+
+          // Add drag detection to disable AR mode
+          const canvas = that.$refs.stelCanvas
+          let startX, startY
+          let isMoving = false
+          const threshold = 5
+
+          const onMove = (x, y) => {
+            if (isMoving && that.$store.state.arMode) {
+              if (Math.abs(x - startX) > threshold || Math.abs(y - startY) > threshold) {
+                that.$store.commit('setARMode', false)
+              }
+            }
+          }
+
+          canvas.addEventListener('mousedown', (e) => {
+            isMoving = true
+            startX = e.clientX
+            startY = e.clientY
+          })
+          window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY))
+          window.addEventListener('mouseup', () => { isMoving = false })
+
+          canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+              isMoving = true
+              startX = e.touches[0].clientX
+              startY = e.touches[0].clientY
+            }
+          }, { passive: true })
+          window.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY)
+          }, { passive: true })
+          window.addEventListener('touchend', () => { isMoving = false })
+
           for (const i in that.$stellariumWebPlugins()) {
             const plugin = that.$stellariumWebPlugins()[i]
             if (plugin.onEngineReady) {

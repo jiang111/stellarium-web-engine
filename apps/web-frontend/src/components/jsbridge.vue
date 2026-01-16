@@ -22,11 +22,17 @@ export default {
       },
       isEnabled: false,
       lastUpdate: 0,
-      lastStableAzimuth: 0
+      lastStableAzimuth: 0,
+      lastAlt: undefined
     }
   },
   mounted () {
     this.registerBridgeActions()
+  },
+  watch: {
+    '$store.state.arMode': function (newVal) {
+      this.updateState()
+    }
   },
   methods: {
     azAltToObserved (azimuth, altitude) {
@@ -63,7 +69,8 @@ export default {
           currentTime: this.getLocalTime(),
           location: this.$store.state.currentLocation,
           speedTime: this.$store.state.stel.time_speed,
-          fov: this.$store.state.stel.fov * 180 / Math.PI
+          fov: this.$store.state.stel.fov * 180 / Math.PI,
+          arMode: this.$store.state.arMode
         }
       jsbridge.postMessage('getState', data)
     },
@@ -118,7 +125,24 @@ export default {
           this.setNightMode(enabled)
           this.updateState()
         },
+        enableARMode: (enabled) => {
+          this.$store.commit('setARMode', enabled)
+          this.updateState()
+        },
         gotoByAltAndAz: (ss) => {
+          const currentAlt = ss.alt
+          if (!this.$store.state.arMode) {
+            if (this.lastAlt !== undefined) {
+              const diff = Math.abs(currentAlt - this.lastAlt)
+              // 当高度变化超过 2 度时，认为用户在上下晃动手机，重新开启 AR 模式
+              if (diff > 2) {
+                this.$store.commit('setARMode', true)
+              }
+            }
+            this.lastAlt = currentAlt
+            return
+          }
+          this.lastAlt = currentAlt
           this.$stel.core.observer.yaw = -1 * ss.az * 0.017453292519943295
           this.$stel.core.observer.pitch = ss.alt * 0.017453292519943295
         },
