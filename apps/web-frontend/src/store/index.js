@@ -50,7 +50,7 @@ const createStore = () => {
       nightmode: false,
       wasmSupport: true,
       arMode: true, // web端自行控制 ar模式
-      enableARMode: false, // 真正能不能用 ar模式
+      appEnableARMode: false, // 真正能不能用 ar模式
 
       autoDetectedLocation: {
         short_name: 'Unknown',
@@ -78,6 +78,9 @@ const createStore = () => {
       replaceStelWebEngine (state, newTree) {
         // mutate StelWebEngine state
         state.stel = newTree
+      },
+      setAppEnableARMode (state, newValue) {
+        state.appEnableARMode = newValue
       },
       toggleBool (state, varName) {
         _.set(state, varName, !_.get(state, varName))

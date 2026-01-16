@@ -127,11 +127,16 @@ export default {
           this.updateState()
         },
         enableARMode: (enabled) => {
-          this.$store.commit('setEnableARMode', enabled)
+          this.$store.commit('setAppEnableARMode', enabled)
+          if (enabled) {
+            this.$store.commit('setARMode', true)
+          } else {
+            this.$store.commit('setARMode', false)
+          }
           this.updateState()
         },
         gotoByAltAndAz: (ss) => {
-          if (!this.$store.state.enableARMode) {
+          if (!this.$store.state.appEnableARMode) {
             return
           }
           const currentAlt = ss.alt
