@@ -49,7 +49,8 @@ const createStore = () => {
       fullscreen: false,
       nightmode: false,
       wasmSupport: true,
-      arMode: false,
+      arMode: true, // web端自行控制 ar模式
+      enableARMode: false, // 真正能不能用 ar模式
 
       autoDetectedLocation: {
         short_name: 'Unknown',

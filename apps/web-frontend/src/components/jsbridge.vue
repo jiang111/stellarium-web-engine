@@ -70,7 +70,8 @@ export default {
           location: this.$store.state.currentLocation,
           speedTime: this.$store.state.stel.time_speed,
           fov: this.$store.state.stel.fov * 180 / Math.PI,
-          arMode: this.$store.state.arMode
+          arMode: this.$store.state.arMode,
+          enableArMode: this.$store.state.enableARMode
         }
       jsbridge.postMessage('getState', data)
     },
@@ -126,10 +127,13 @@ export default {
           this.updateState()
         },
         enableARMode: (enabled) => {
-          this.$store.commit('setARMode', enabled)
+          this.$store.commit('setEnableARMode', enabled)
           this.updateState()
         },
         gotoByAltAndAz: (ss) => {
+          if (!this.$store.state.enableARMode) {
+            return
+          }
           const currentAlt = ss.alt
           if (!this.$store.state.arMode) {
             if (this.lastAlt !== undefined) {
