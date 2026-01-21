@@ -129,13 +129,13 @@ export default {
         enableARMode: (enabled) => {
           this.$store.commit('setAppEnableARMode', enabled)
           if (enabled) {
-            this.$store.commit('setARMode', true)
+            this.$store.commit('setARMode', false)
           } else {
             this.$store.commit('setARMode', false)
           }
           this.updateState()
         },
-        gotoByAltAndAz: (ss) => {
+        gotoByAltAndAzWithArMode: (ss) => {
           if (!this.$store.state.appEnableARMode) {
             return
           }
@@ -152,6 +152,10 @@ export default {
             return
           }
           this.lastAlt = currentAlt
+          this.$stel.core.observer.yaw = -1 * ss.az * 0.017453292519943295
+          this.$stel.core.observer.pitch = ss.alt * 0.017453292519943295
+        },
+        gotoByAltAndAz: (ss) => {
           this.$stel.core.observer.yaw = -1 * ss.az * 0.017453292519943295
           this.$stel.core.observer.pitch = ss.alt * 0.017453292519943295
         },

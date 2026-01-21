@@ -49,7 +49,7 @@ const createStore = () => {
       fullscreen: false,
       nightmode: false,
       wasmSupport: true,
-      arMode: true, // web端自行控制 ar模式
+      arMode: false, // web端自行控制 ar模式,默认 false
       appEnableARMode: false, // 真正能不能用 ar模式
 
       autoDetectedLocation: {
@@ -75,39 +75,39 @@ const createStore = () => {
       useAutoLocation: false
     },
     mutations: {
-      replaceStelWebEngine (state, newTree) {
+      replaceStelWebEngine(state, newTree) {
         // mutate StelWebEngine state
         state.stel = newTree
       },
-      setAppEnableARMode (state, newValue) {
+      setAppEnableARMode(state, newValue) {
         state.appEnableARMode = newValue
       },
-      toggleBool (state, varName) {
+      toggleBool(state, varName) {
         _.set(state, varName, !_.get(state, varName))
       },
-      setARMode (state, newValue) {
+      setARMode(state, newValue) {
         state.arMode = newValue
       },
-      setValue (state, { varName, newValue }) {
+      setValue(state, { varName, newValue }) {
         _.set(state, varName, newValue)
       },
-      setAutoDetectedLocation (state, newValue) {
+      setAutoDetectedLocation(state, newValue) {
         state.autoDetectedLocation = { ...newValue }
         if (state.useAutoLocation) {
           state.currentLocation = { ...newValue }
         }
       },
-      setUseAutoLocation (state, newValue) {
+      setUseAutoLocation(state, newValue) {
         state.useAutoLocation = newValue
         if (newValue) {
           state.currentLocation = { ...state.autoDetectedLocation }
         }
       },
-      setCurrentLocation (state, newValue) {
+      setCurrentLocation(state, newValue) {
         state.useAutoLocation = false
         state.currentLocation = { ...newValue }
       },
-      setSelectedObject (state, newValue) {
+      setSelectedObject(state, newValue) {
         state.selectedObject = newValue
       }
     }
