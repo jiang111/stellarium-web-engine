@@ -53,7 +53,7 @@ void main()
     k = smoothstep(u_core_size * 1.25, u_core_size * 0.75, dist);
 
     // Halo
-    k += smoothstep(1.0, 0.0, dist) * 0.08;
+    // k += smoothstep(1.0, 0.0, dist) * 0.08;
     gl_FragColor.rgb = v_color.rgb;
     gl_FragColor.a = v_color.a * clamp(k, 0.0, 1.0);
 }
