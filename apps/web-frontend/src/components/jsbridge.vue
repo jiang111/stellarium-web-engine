@@ -14,6 +14,8 @@ export default {
         azimuth: 0,
         altitude: 0
       },
+      linesLayer: null,
+      linesObj: null,
       smoothing: {
         enabled: true,
         factor: 0.3,
@@ -255,8 +257,127 @@ export default {
         getState:
           () => {
             this.updateState()
+          },
+        drawLines: (data) => {
+          this.clearLines()
+          const {
+            points: pointsList = [],
+            color = '#FF0000',
+            width = 2
+          } = data
+
+          if (!pointsList || pointsList.length < 2) {
+            console.warn('drawLines: Need at least 2 points')
+            return
           }
+
+          // 1. 转换坐标并生成虚线段 (Manual Dashing)
+          const features = []
+          const toRad = Math.PI / 180
+          const dashSizeDeg = 1.0 // 虚线实线部分长度 (度)
+          const gapSizeDeg = 0.5 // 虚线间隔部分长度 (度)
+          const dashRad = dashSizeDeg * toRad
+          const gapRad = gapSizeDeg * toRad
+
+          // Helper: Spherical Linear Interpolation
+          const slerp = (v1, v2, t) => {
+            const omega = Math.acos(Math.min(1, Math.max(-1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2])))
+            if (Math.abs(omega) < 1e-6) return v1
+            const sinOmega = Math.sin(omega)
+            const k1 = Math.sin((1 - t) * omega) / sinOmega
+            const k2 = Math.sin(t * omega) / sinOmega
+            return [
+              k1 * v1[0] + k2 * v2[0],
+              k1 * v1[1] + k2 * v2[1],
+              k1 * v1[2] + k2 * v2[2]
+            ]
+          }
+
+          const getVecIcrf = (pt) => {
+            const azR = pt.az * toRad
+            const altR = pt.alt * toRad
+            const vObs = this.$stel.s2c(azR, altR)
+            return this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
+          }
+
+          const vecToRaDecDeg = (v) => {
+            const radec = this.$stel.c2s(v)
+            return [radec[0] * 180 / Math.PI, radec[1] * 180 / Math.PI]
+          }
+
+          for (let i = 0; i < pointsList.length - 1; i++) {
+            const pt1 = pointsList[i]
+            const pt2 = pointsList[i + 1]
+
+            const v1 = getVecIcrf(pt1)
+            const v2 = getVecIcrf(pt2)
+
+            const dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
+            const totalAngle = Math.acos(Math.min(1, Math.max(-1, dot)))
+
+            let currentAngle = 0
+            while (currentAngle < totalAngle) {
+              const startT = currentAngle / totalAngle
+              const endT = Math.min((currentAngle + dashRad) / totalAngle, 1)
+
+              const pStart = slerp(v1, v2, startT)
+              const pEnd = slerp(v1, v2, endT)
+
+              // Create a LineString feature for each dash
+              features.push({
+                type: 'Feature',
+                properties: {
+                  stroke: color,
+                  'stroke-width': width
+                },
+                geometry: {
+                  type: 'LineString',
+                  coordinates: [vecToRaDecDeg(pStart), vecToRaDecDeg(pEnd)]
+                }
+              })
+
+              currentAngle += dashRad + gapRad
+            }
+          }
+
+          const geojsonData = {
+            type: 'FeatureCollection',
+            features: features
+          }
+
+          // 先清除旧的 geojson 对象（如果存在）
+          this.clearLines()
+
+          // 获取或创建 layer
+          let layer = this.$stel.getObj('jsbridge-lines')
+          if (!layer) {
+            layer = this.$stel.createLayer({
+              id: 'jsbridge-lines',
+              z: 40,
+              visible: true
+            })
+          }
+          layer.visible = true
+
+          const lineObj = this.$stel.createObj('geojson', {
+            data: geojsonData
+          })
+
+          layer.add(lineObj)
+          this.linesLayer = layer
+          this.linesObj = lineObj // 保存 geojson 对象引用
+        },
+        clearLines: () => {
+          this.clearLines()
+        }
       })
+    },
+    clearLines: function () {
+      if (this.linesLayer && this.linesObj) {
+        this.linesLayer.remove(this.linesObj)
+        this.linesLayer.visible = false
+        this.linesObj = null
+      }
     },
     getLocalTime: function () {
       var d = new Date()
