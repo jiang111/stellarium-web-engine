@@ -58,7 +58,7 @@ static int cardinal_render(obj_t *obj, const painter_t *painter)
     double p[4];
 
     if (c->visible.value <= 0) return 0;
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < 8; i++) {
         if (painter_is_point_clipped_fast(painter, FRAME_OBSERVED,
                 POINTS[i].pos, true))
             continue;
