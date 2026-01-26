@@ -16,6 +16,10 @@ export default {
       },
       linesLayer: null,
       linesObj: null,
+      currentRectLayer: null,
+      currentRectObj: null,
+      targetRectLayer: null,
+      targetRectObj: null,
       smoothing: {
         enabled: true,
         factor: 0.3,
@@ -137,6 +141,100 @@ export default {
           }
           this.updateState()
         },
+        drawRectWithAltAndAz: (ss) => {
+          // 清除之前的矩形
+          if (this.currentRectLayer && this.currentRectObj) {
+            this.currentRectLayer.remove(this.currentRectObj)
+            this.currentRectObj = null
+          }
+
+          const alt = Number(ss.alt)
+          const az = Number(ss.az)
+          const fovX = Number(ss.fovX)
+          const fovY = Number(ss.fovY)
+
+          if (isNaN(alt) || isNaN(az) || isNaN(fovX) || isNaN(fovY)) {
+            console.warn('drawRectWithAltAndAz: Invalid parameters', ss)
+            return
+          }
+
+          const toRad = Math.PI / 180
+          const getRaDec = (azDeg, altDeg) => {
+            const azR = azDeg * toRad
+            const altR = altDeg * toRad
+            const vObs = this.$stel.s2c(azR, altR)
+            const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
+            const radec = this.$stel.c2s(vIcrf)
+            return [radec[0] * 180 / Math.PI, radec[1] * 180 / Math.PI]
+          }
+
+          // 计算矩形四个角
+          let cosAlt = Math.cos(alt * toRad)
+          if (cosAlt < 0.001) cosAlt = 0.001 // 避免接近天顶时宽度过大
+
+          // 方位角半宽需要根据高度角修正
+          const dAz = (fovX / 2) / cosAlt
+          const dAlt = fovY / 2
+
+          const p1 = getRaDec(az - dAz, alt + dAlt) // 左上
+          const p2 = getRaDec(az + dAz, alt + dAlt) // 右上
+          const p3 = getRaDec(az + dAz, alt - dAlt) // 右下
+          const p4 = getRaDec(az - dAz, alt - dAlt) // 左下
+
+          const features = [{
+            type: 'Feature',
+            properties: {
+              stroke: '#F48123',
+              'stroke-width': 2,
+              'fill-opacity': 0
+            },
+            geometry: {
+              type: 'LineString',
+              coordinates: [p1, p2, p3, p4, p1]
+            }
+          }]
+
+          const geojsonData = {
+            type: 'FeatureCollection',
+            features: features
+          }
+
+          // 获取或创建 layer
+          let layer = this.currentRectLayer
+          if (!layer) {
+            // 尝试获取现有 layer，如果之前的状态没有保存的话
+            layer = this.$stel.getObj('jsbridge-rects')
+            if (!layer) {
+              layer = this.$stel.createLayer({
+                id: 'jsbridge-rects',
+                z: 40,
+                visible: true
+              })
+            }
+            this.currentRectLayer = layer
+          }
+          layer.visible = true
+
+          const rectObj = this.$stel.createObj('geojson', {
+            data: geojsonData
+          })
+
+          layer.add(rectObj)
+          this.currentRectObj = rectObj
+        },
+        getCenterRaDecValue: () => {
+          const yaw = this.$stel.core.observer.yaw
+          const pitch = this.$stel.core.observer.pitch
+          const vObs = this.$stel.s2c(-yaw, pitch)
+          const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
+          const radec = this.$stel.c2s(vIcrf)
+          const result = {
+            ra: radec[0] * 180 / Math.PI,
+            dec: radec[1] * 180 / Math.PI
+          }
+          console.log('getCenterRaDecValue result:', result)
+          return result
+        },
         gotoByAltAndAzWithArMode: (ss) => {
           if (!this.$store.state.appEnableARMode) {
             return
@@ -206,6 +304,8 @@ export default {
         updateFov: (fovDeg) => {
           if (fovDeg < 0.01) fovDeg = 0.01
           if (fovDeg > 185) fovDeg = 185
+
+
           this.$stel.zoomTo(fovDeg * Math.PI / 180, 0.5)
           this.updateState()
         },
