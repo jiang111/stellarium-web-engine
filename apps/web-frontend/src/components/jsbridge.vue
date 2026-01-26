@@ -1,5 +1,8 @@
 <template>
-  <div style="display: none"></div>
+  <div class="jsbridge-overlay"
+       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
+    <div v-if="showCenterFov" :style="fovBoxStyle"></div>
+  </div>
 </template>
 <script>
 import Moment from 'moment'
@@ -27,15 +30,33 @@ export default {
       isEnabled: false,
       lastUpdate: 0,
       lastStableAzimuth: 0,
-      lastAlt: undefined
+      lastAlt: undefined,
+      showCenterFov: true,
+      targetFovX: 10,
+      targetFovY: 5,
+      fovBoxStyle: {
+        width: '0px',
+        height: '0px',
+        background: 'rgba(244, 129, 35, 0.1)',
+        border: '1px solid rgba(244, 129, 35, 0.7)',
+        transform: 'rotate(0deg)'
+      },
+      fovAnimationId: null
     }
   },
   mounted () {
     this.registerBridgeActions()
+    this.startFovAnimation()
+  },
+  beforeDestroy () {
+    this.stopFovAnimation()
   },
   watch: {
     '$store.state.arMode': function (newVal) {
       this.updateState()
+    },
+    '$store.state.stel.fov': function () {
+      this.updateFovBox()
     }
   },
   methods: {
@@ -69,6 +90,89 @@ export default {
       }
       return fovYRad * 180 / Math.PI
     },
+    // 在屏幕中心点绘制一个矩形 fov (DOM overlay with real-time rotation)
+    updateFovBox () {
+      if (!this.showCenterFov || !this.$stel || !this.$stel.canvas) return
+
+      const fovYRad = this.$store.state.stel.fov
+      const canvasHeight = this.$stel.canvas.height
+      const dist = (canvasHeight / 2) / Math.tan(fovYRad / 2)
+
+      const targetFovXRad = (this.targetFovX || 10) * Math.PI / 180
+      const targetFovYRad = (this.targetFovY || 5) * Math.PI / 180
+
+      const widthPx = 2 * dist * Math.tan(targetFovXRad / 2)
+      const heightPx = 2 * dist * Math.tan(targetFovYRad / 2)
+
+      // Calculate rotation to align with Alt-Az Up (Zenith)
+      const angleDeg = this.calculateFovRotation()
+
+      this.fovBoxStyle = {
+        width: widthPx + 'px',
+        height: heightPx + 'px',
+        background: 'rgba(244, 129, 35, 0.1)',
+        border: '1px solid rgba(244, 129, 35, 0.7)',
+        transform: `rotate(${angleDeg}deg)`
+      }
+    },
+    // Calculate the rotation angle to align with Alt-Az frame
+    calculateFovRotation () {
+      if (!this.$stel || !this.$stel.core) return 0
+
+      const yaw = this.$stel.core.observer.yaw
+      const pitch = this.$stel.core.observer.pitch
+
+      // View direction in Observed frame
+      const vF = this.$stel.s2c(-yaw, pitch)
+
+      // Zenith in Observed frame
+      const vZ = [0, 0, 1]
+
+      // Cross product helpers
+      const normalize = (v) => {
+        const l = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+        return l > 0 ? [v[0] / l, v[1] / l, v[2] / l] : [0, 0, 0]
+      }
+      const cross = (a, b) => [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+      ]
+
+      // Right vector (perpendicular to view and zenith)
+      let vR = cross(vF, vZ)
+      if (vR[0] * vR[0] + vR[1] * vR[1] + vR[2] * vR[2] < 1e-6) {
+        vR = [1, 0, 0]
+      }
+      vR = normalize(vR)
+
+      // Up vector in Alt-Az (perpendicular to view, pointing towards zenith)
+      const vU = normalize(cross(vR, vF))
+
+      // Convert vU to View frame (screen space)
+      const vUView = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'VIEW', vU)
+
+      // Calculate angle: atan2(x, y) gives angle from Y-axis (screen up)
+      const angleRad = Math.atan2(vUView[0], vUView[1])
+      return angleRad * 180 / Math.PI
+    },
+    // Start real-time animation loop for FOV box rotation
+    startFovAnimation () {
+      const animate = () => {
+        if (this.showCenterFov) {
+          this.updateFovBox()
+        }
+        this.fovAnimationId = requestAnimationFrame(animate)
+      }
+      this.fovAnimationId = requestAnimationFrame(animate)
+    },
+    // Stop animation loop
+    stopFovAnimation () {
+      if (this.fovAnimationId) {
+        cancelAnimationFrame(this.fovAnimationId)
+        this.fovAnimationId = null
+      }
+    },
     updateState () {
       const data =
         {
@@ -89,8 +193,11 @@ export default {
           fovX: this.getFovX(),
           fovY: this.getFovY(),
           arMode: this.$store.state.arMode,
-          enableArMode: this.$store.state.appEnableARMode
+          enableArMode: this.$store.state.appEnableARMode,
+          currentLocation: this.getCenterRaDecValue(),
+          drawSelectedTargetLine: this.linesObj != null
         }
+      this.updateFovBox()
       jsbridge.postMessage('getState', data)
     },
     registerBridgeActions () {
@@ -152,7 +259,29 @@ export default {
             this.$store.commit('setARMode', false)
           }
           this.updateState()
+          this.updateState()
         },
+        // 配置中心视场框的显示与否，以及大小
+        toggleCenterFov: (data) => {
+          if (typeof data === 'boolean') {
+            this.showCenterFov = data
+          } else if (typeof data === 'object') {
+            if (data.showCenter !== undefined) {
+              this.showCenterFov = data.showCenter
+            }
+            if (data.fovX !== undefined) {
+              this.targetFovX = Number(data.fovX)
+            }
+            if (data.fovY !== undefined) {
+              this.targetFovY = Number(data.fovY)
+            }
+          }
+
+          if (this.showCenterFov) {
+            this.updateFovBox()
+          }
+        },
+        /// 根据 app 的赤道仪的位置，实时绘制一个矩形，表示当前相机的视场范围
         drawRectWithAltAndAz: (ss) => {
           // 清除之前的矩形
           if (this.currentRectLayer && this.currentRectObj) {
@@ -232,14 +361,14 @@ export default {
           const features = [{
             type: 'Feature',
             properties: {
-              stroke: '#F48123',
+              stroke: '#3C83FF',
               'stroke-width': 2,
-              'fill-opacity': 0.3,
-              fill: '#F48123'
+              'fill-opacity': 0.1,
+              fill: '#3C83FF'
             },
             geometry: {
               type: 'Polygon',
-              coordinates: [[p1, p2, p3, p4, p1]]
+              coordinates: [[p1, p4, p3, p2, p1]]
             }
           }]
 
@@ -271,19 +400,9 @@ export default {
           layer.add(rectObj)
           this.currentRectObj = rectObj
         },
-        // 获取中心点的赤经赤纬
-        getCenterRaDecValue: () => {
-          const yaw = this.$stel.core.observer.yaw
-          const pitch = this.$stel.core.observer.pitch
-          const vObs = this.$stel.s2c(-yaw, pitch)
-          const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
-          const radec = this.$stel.c2s(vIcrf)
-          const result = {
-            ra: radec[0] * 180 / Math.PI,
-            dec: radec[1] * 180 / Math.PI
-          }
-          console.log('getCenterRaDecValue result:', result)
-          return result
+        // 仅用于配置星图的 armode,和 app 本身的 armode 没关系
+        updateArMode: (v) => {
+          this.$store.commit('setARMode', v)
         },
         gotoByAltAndAzWithArMode: (ss) => {
           if (!this.$store.state.appEnableARMode) {
@@ -351,11 +470,31 @@ export default {
         unselect: () => {
           this.$stel.core.selection = 0
         },
-        updateFov: (fovDeg) => {
-          if (fovDeg < 0.01) fovDeg = 0.01
-          if (fovDeg > 185) fovDeg = 185
+        // updateFov 支持两种调用方式：
+        // 1. updateFov(fovDeg) - 传入单个 fovY 度数
+        // 2. updateFov({fovX, fovY}) - 传入包含 fovX 和 fovY 的对象
+        // 使用 fovY 作为垂直视场角，与 drawRectWithAltAndAz 保持一致
+        updateFov: (data) => {
+          let fovYDeg
 
-          this.$stel.zoomTo(fovDeg * Math.PI / 180, 0.5)
+          if (typeof data === 'object' && data !== null) {
+            // 处理 {fovX, fovY} 对象参数，直接使用 fovY
+            fovYDeg = Number(data.fovY)
+
+            if (isNaN(fovYDeg)) {
+              console.warn('updateFov: Invalid fovY', data)
+              return
+            }
+          } else {
+            // 处理单个数值参数（传统方式，fovY）
+            fovYDeg = Number(data)
+          }
+
+          // 限制范围
+          if (fovYDeg < 0.01) fovYDeg = 0.01
+          if (fovYDeg > 180) fovYDeg = 180
+
+          this.$stel.zoomTo(fovYDeg * Math.PI / 180, 0.5)
           this.updateState()
         },
         setLocation: (loc) => {
@@ -534,6 +673,37 @@ export default {
       const m = Moment(d)
       // 转换成毫秒值
       return m.utc().toDate().getTime()
+    },
+    // 获取中心点的赤经赤纬
+    getCenterRaDecValue: function () {
+      const yaw = this.$stel.core.observer.yaw
+      const pitch = this.$stel.core.observer.pitch
+      const vObs = this.$stel.s2c(-yaw, pitch)
+
+      // J2000 (ICRF)
+      const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
+      const radecIcrf = this.$stel.c2s(vIcrf)
+      let raJ2000 = radecIcrf[0] * 12 / Math.PI
+      if (raJ2000 < 0) raJ2000 += 24
+      if (raJ2000 >= 24) raJ2000 -= 24
+      const decJ2000 = radecIcrf[1] * 180 / Math.PI
+
+      // JNow
+      const vJnow = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'JNOW', vObs)
+      const radecJnow = this.$stel.c2s(vJnow)
+      let raJnow = radecJnow[0] * 12 / Math.PI
+      if (raJnow < 0) raJnow += 24
+      if (raJnow >= 24) raJnow -= 24
+      const decJnow = radecJnow[1] * 180 / Math.PI
+
+      const result = {
+        ra: raJnow,
+        dec: decJnow,
+        ra_j2000: raJ2000,
+        dec_j2000: decJ2000
+      }
+      console.log('getCenterRaDecValue result:', result)
+      return result
     },
     setLocation: function (loc) {
       // 确保 loc 包含必要字段
