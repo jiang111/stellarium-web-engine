@@ -18,8 +18,6 @@ export default {
       linesObj: null,
       currentRectLayer: null,
       currentRectObj: null,
-      targetRectLayer: null,
-      targetRectObj: null,
       smoothing: {
         enabled: true,
         factor: 0.3,
@@ -159,38 +157,75 @@ export default {
           }
 
           const toRad = Math.PI / 180
-          const getRaDec = (azDeg, altDeg) => {
-            const azR = azDeg * toRad
-            const altR = altDeg * toRad
-            const vObs = this.$stel.s2c(azR, altR)
+
+          // Vector helpers
+          const normalize = (v) => {
+            const l = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+            return l > 0 ? [v[0] / l, v[1] / l, v[2] / l] : [0, 0, 0]
+          }
+          const cross = (a, b) => [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0]
+          ]
+          const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+          const scale = (v, s) => [v[0] * s, v[1] * s, v[2] * s]
+
+          // 1. Calculate Center Vector (View Direction) in Observed Frame
+          const azR = az * toRad
+          const altR = alt * toRad
+          // s2c returns direction vector from spherical coords.
+          // Note: Stellarium az usually needs negation for standard math or check s2c impl.
+          // Based on gotoByAltAndAz: yaw = -az, pitch = alt.
+          // Let's rely on s2c to handle the frame correctly if we pass consistent args.
+          const vF = this.$stel.s2c(azR, altR)
+
+          // 2. Define Local Tangent Plane Basis
+          // Zenith is usually Z-axis in observed frame [0,0,1]
+          const vZ = [0, 0, 1]
+          let vR = cross(vF, vZ)
+          // Handle singularity at Zenith/Nadir
+          if (vR[0] * vR[0] + vR[1] * vR[1] + vR[2] * vR[2] < 1e-6) {
+            vR = [1, 0, 0] // Arbitrary horizontal at pole
+          }
+          vR = normalize(vR)
+          const vU = normalize(cross(vR, vF))
+
+          // 3. Calculate 4 corners on Tangent Plane (Camera FOV)
+          // Gnomonic projection: distance = tan(angle)
+          const tanX = Math.tan((fovX / 2) * toRad)
+          const tanY = Math.tan((fovY / 2) * toRad)
+
+          // Corners relative to vF
+          // p = vF + vR*tx + vU*ty
+          const c1 = normalize(add(vF, add(scale(vR, -tanX), scale(vU, tanY)))) // Top-Left
+          const c2 = normalize(add(vF, add(scale(vR, tanX), scale(vU, tanY)))) // Top-Right
+          const c3 = normalize(add(vF, add(scale(vR, tanX), scale(vU, -tanY)))) // Bottom-Right
+          const c4 = normalize(add(vF, add(scale(vR, -tanX), scale(vU, -tanY))))// Bottom-Left
+
+          // 4. Convert to ICRF (Ra/Dec)
+          const vecToRaDec = (vObs) => {
             const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
             const radec = this.$stel.c2s(vIcrf)
-            return [radec[0] * 180 / Math.PI, radec[1] * 180 / Math.PI]
+            return [radec[0] / toRad, radec[1] / toRad]
           }
 
-          // 计算矩形四个角
-          let cosAlt = Math.cos(alt * toRad)
-          if (cosAlt < 0.001) cosAlt = 0.001 // 避免接近天顶时宽度过大
-
-          // 方位角半宽需要根据高度角修正
-          const dAz = (fovX / 2) / cosAlt
-          const dAlt = fovY / 2
-
-          const p1 = getRaDec(az - dAz, alt + dAlt) // 左上
-          const p2 = getRaDec(az + dAz, alt + dAlt) // 右上
-          const p3 = getRaDec(az + dAz, alt - dAlt) // 右下
-          const p4 = getRaDec(az - dAz, alt - dAlt) // 左下
+          const p1 = vecToRaDec(c1)
+          const p2 = vecToRaDec(c2)
+          const p3 = vecToRaDec(c3)
+          const p4 = vecToRaDec(c4)
 
           const features = [{
             type: 'Feature',
             properties: {
               stroke: '#F48123',
               'stroke-width': 2,
-              'fill-opacity': 0
+              'fill-opacity': 0.3,
+              fill: '#F48123'
             },
             geometry: {
-              type: 'LineString',
-              coordinates: [p1, p2, p3, p4, p1]
+              type: 'Polygon',
+              coordinates: [[p1, p2, p3, p4, p1]]
             }
           }]
 
@@ -222,6 +257,7 @@ export default {
           layer.add(rectObj)
           this.currentRectObj = rectObj
         },
+        // 获取中心点的赤经赤纬
         getCenterRaDecValue: () => {
           const yaw = this.$stel.core.observer.yaw
           const pitch = this.$stel.core.observer.pitch
@@ -304,7 +340,6 @@ export default {
         updateFov: (fovDeg) => {
           if (fovDeg < 0.01) fovDeg = 0.01
           if (fovDeg > 185) fovDeg = 185
-
 
           this.$stel.zoomTo(fovDeg * Math.PI / 180, 0.5)
           this.updateState()
