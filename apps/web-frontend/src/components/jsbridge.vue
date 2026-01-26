@@ -57,6 +57,18 @@ export default {
       const diff = this.angleDiff(to, from)
       return from + diff * t
     },
+    getFovY () {
+      return this.$store.state.stel.fov * 180 / Math.PI
+    },
+    getFovX () {
+      const fovYRad = this.$store.state.stel.fov
+      if (this.$stel && this.$stel.canvas) {
+        const ratio = this.$stel.canvas.width / this.$stel.canvas.height
+        const fovXRad = 2 * Math.atan(Math.tan(fovYRad / 2) * ratio)
+        return fovXRad * 180 / Math.PI
+      }
+      return fovYRad * 180 / Math.PI
+    },
     updateState () {
       const data =
         {
@@ -74,8 +86,10 @@ export default {
           location: this.$store.state.currentLocation,
           speedTime: this.$store.state.stel.time_speed,
           fov: this.$store.state.stel.fov * 180 / Math.PI,
+          fovX: this.getFovX(),
+          fovY: this.getFovY(),
           arMode: this.$store.state.arMode,
-          enableArMode: this.$store.state.enableARMode
+          enableArMode: this.$store.state.appEnableARMode
         }
       jsbridge.postMessage('getState', data)
     },
