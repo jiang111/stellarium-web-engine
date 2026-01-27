@@ -333,14 +333,34 @@ export default {
           const vF = this.$stel.s2c(azR, altR)
 
           // 2. Define Local Tangent Plane Basis
-          // Zenith is usually Z-axis in observed frame [0,0,1]
-          const vZ = [0, 0, 1]
-          let vR = cross(vF, vZ)
-          // Handle singularity at Zenith/Nadir
+          // 2. Define Local Tangent Plane Basis
+          // We want fovX (width, along vR) to be perpendicular to the direction of standard North (ra=0, dec=90)
+          // instead of Zenith.
+
+          // Get Celestial North Pole (ra=0, dec=90) in ICRF [0, 0, 1]
+          // Convert to OBSERVED frame
+          const vNorthIcrf = [0, 0, 1]
+          const vNorthObs = this.$stel.convertFrame(this.$stel.core.observer, 'ICRF', 'OBSERVED', vNorthIcrf)
+
+          // Calculate Right vector (vR)
+          // vR should be perpendicular to the plane formed by View Direction (vF) and North Pole
+          // vR = vNorthObs x vF (This points "East" relative to the North Pole direction)
+          let vR = cross(vNorthObs, vF)
+
+          // Handle singularity if looking directly at North Pole or South Pole
           if (vR[0] * vR[0] + vR[1] * vR[1] + vR[2] * vR[2] < 1e-6) {
-            vR = [1, 0, 0] // Arbitrary horizontal at pole
+            // If looking at pole, define arbitrary "Right" vector
+            // For North pole +Z, we can choose +Y [0,1,0] as "down/up" so X [1,0,0] is right?
+            // Let's just pick a standard vector typically used for "Right" at poles, e.g. from Zenith
+            const vZ = [0, 0, 1]
+            vR = cross(vZ, vF)
+            if (vR[0] * vR[0] + vR[1] * vR[1] + vR[2] * vR[2] < 1e-6) {
+              vR = [1, 0, 0]
+            }
           }
+
           vR = normalize(vR)
+          // Up vector (vU) completes the orthonormal basis
           const vU = normalize(cross(vR, vF))
 
           // 3. Calculate 4 corners on Tangent Plane (Camera FOV)
