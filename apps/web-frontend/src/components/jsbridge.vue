@@ -94,24 +94,29 @@ export default {
     updateFovBox () {
       if (!this.showCenterFov || !this.$stel || !this.$stel.canvas) return
 
-      const fovYRad = this.$store.state.stel.fov
+      // Use buffer dimensions for precise aspect ratio
+      const canvasWidth = this.$stel.canvas.width
       const canvasHeight = this.$stel.canvas.height
+      const aspect = canvasWidth / canvasHeight
 
-      // Stellarium projection pipeline:
-      // 1. Stereographic: x' = 2 * tan(θ / 2)
-      // 2. Perspective matrix with f = 1 / (2 * tan(fovy / 4))
-      // 3. Combined effect: screenPos = tan(θ / 2) / tan(fovy / 4)
-      // 4. Half screen height corresponds to half fov, so:
-      //    canvasHeight/2 = f * 2 * tan(fov/4) = tan(fov/4) / tan(fov/4) = 1 (normalized)
-      //    This means: halfPixel = (canvasHeight/2) * tan(targetAngle/2) / tan(fov/4)
-      //    Full width = canvasHeight * tan(targetFovX/4) / tan(fovY/4)
+      // Use client dimensions for CSS pixel scaling (handles DPR)
+      const clientHeight = this.$stel.canvas.clientHeight
 
       const targetFovXRad = (this.targetFovX || 10) * Math.PI / 180
       const targetFovYRad = (this.targetFovY || 5) * Math.PI / 180
 
+      const fovYRad = this.$store.state.stel.fov
+      let currentFovYRad = fovYRad
+
+      // Handle aspect ratio effect on FOV definition in Stellarium
+      if (aspect < 1) {
+        currentFovYRad = 4 * Math.atan(Math.tan(fovYRad / 4) / aspect)
+      }
+
       // Combined stereographic + perspective formula
-      const widthPx = canvasHeight * Math.tan(targetFovXRad / 4) / Math.tan(fovYRad / 4)
-      const heightPx = canvasHeight * Math.tan(targetFovYRad / 4) / Math.tan(fovYRad / 4)
+      // Note: use clientHeight (CSS px) instead of canvasHeight (physical px) to fix 3x size issue
+      const widthPx = clientHeight * Math.tan(targetFovXRad / 4) / Math.tan(currentFovYRad / 4)
+      const heightPx = clientHeight * Math.tan(targetFovYRad / 4) / Math.tan(currentFovYRad / 4)
 
       // Calculate rotation to align with Alt-Az Up (Zenith)
       const angleDeg = this.calculateFovRotation()
@@ -119,7 +124,7 @@ export default {
       this.fovBoxStyle = {
         width: widthPx + 'px',
         height: heightPx + 'px',
-        background: 'rgba(244, 129, 35, 0.1)',
+        // background: 'rgba(244, 129, 35, 0.1)',
         border: '1px solid rgba(244, 129, 35, 0.7)',
         transform: `rotate(${angleDeg}deg)`
       }
@@ -509,7 +514,7 @@ export default {
 
           if (typeof data === 'object' && data !== null) {
             // 处理 {fovX, fovY} 对象参数，直接使用 fovY
-            fovYDeg = Number(data.fovY)
+            fovYDeg = Number(data.fovY * 2)
 
             if (isNaN(fovYDeg)) {
               console.warn('updateFov: Invalid fovY', data)
