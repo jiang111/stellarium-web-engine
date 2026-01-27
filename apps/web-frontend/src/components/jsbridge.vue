@@ -124,7 +124,7 @@ export default {
       this.fovBoxStyle = {
         width: widthPx + 'px',
         height: heightPx + 'px',
-        // background: 'rgba(244, 129, 35, 0.1)',
+        background: 'rgba(244, 129, 35, 0.1)',
         border: '1px solid rgba(244, 129, 35, 0.7)',
         transform: `rotate(${angleDeg}deg)`
       }
