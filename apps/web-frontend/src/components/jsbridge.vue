@@ -96,15 +96,20 @@ export default {
 
       const fovYRad = this.$store.state.stel.fov
       const canvasHeight = this.$stel.canvas.height
-      
-      // Stellarium uses stereographic projection: screenPos = 2 * tan(angle / 2)
-      // Calculate pixel size using the projection formula ratio:
-      // pixelSize / canvasHeight = tan(targetFov/4) / tan(currentFov/4)
-      
+
+      // Stellarium projection pipeline:
+      // 1. Stereographic: x' = 2 * tan(θ / 2)
+      // 2. Perspective matrix with f = 1 / (2 * tan(fovy / 4))
+      // 3. Combined effect: screenPos = tan(θ / 2) / tan(fovy / 4)
+      // 4. Half screen height corresponds to half fov, so:
+      //    canvasHeight/2 = f * 2 * tan(fov/4) = tan(fov/4) / tan(fov/4) = 1 (normalized)
+      //    This means: halfPixel = (canvasHeight/2) * tan(targetAngle/2) / tan(fov/4)
+      //    Full width = canvasHeight * tan(targetFovX/4) / tan(fovY/4)
+
       const targetFovXRad = (this.targetFovX || 10) * Math.PI / 180
       const targetFovYRad = (this.targetFovY || 5) * Math.PI / 180
 
-      // Using stereographic projection ratio
+      // Combined stereographic + perspective formula
       const widthPx = canvasHeight * Math.tan(targetFovXRad / 4) / Math.tan(fovYRad / 4)
       const heightPx = canvasHeight * Math.tan(targetFovYRad / 4) / Math.tan(fovYRad / 4)
 
@@ -119,22 +124,43 @@ export default {
         transform: `rotate(${angleDeg}deg)`
       }
     },
-    // Calculate the rotation angle to align with Alt-Az frame
-    // The FOV box at screen center should rotate by the observer's roll angle
-    // Roll is the rotation around the view direction (line of sight)
-    // This determines how much the "up towards zenith" direction is tilted on screen
+    // Calculate the rotation angle to align FOV box's long edge towards celestial north pole
     calculateFovRotation () {
       if (!this.$stel || !this.$stel.core) return 0
 
-      // Roll is the rotation around the view direction
-      // When roll = 0, the top of the screen points towards zenith
-      // When roll != 0, the screen is rotated relative to the horizon
-      const roll = this.$stel.core.observer.roll
+      const obs = this.$stel.core.observer
 
-      // Convert to degrees for CSS
-      // CSS rotate is clockwise positive, roll in the engine may have different convention
-      // Need to check the sign - if wrong, just negate it
-      return roll * 180 / Math.PI
+      // 1. Get screen center in ICRF coordinates
+      const vCenterView = [0, 0, -1] // VIEW frame center direction
+      const vCenterIcrf = this.$stel.convertFrame(obs, 'VIEW', 'ICRF', vCenterView)
+
+      // 2. Calculate current center's RA/Dec
+      const radec = this.$stel.c2s(vCenterIcrf)
+      const ra = radec[0]
+      const dec = radec[1]
+
+      // 3. Create a point slightly north (higher dec) along the same RA
+      const decOffset = 0.01 // Small offset in radians (~0.5 degrees)
+      const northPointIcrf = this.$stel.s2c(ra, dec + decOffset)
+
+      // 4. Convert both points to VIEW frame
+      const centerView = this.$stel.convertFrame(obs, 'ICRF', 'VIEW', vCenterIcrf)
+      const northView = this.$stel.convertFrame(obs, 'ICRF', 'VIEW', northPointIcrf)
+
+      // 5. Calculate direction vector in VIEW frame
+      const dx = northView[0] - centerView[0]
+      const dy = northView[1] - centerView[1]
+
+      // 6. Convert to screen coordinates (Y is flipped in screen space)
+      const screenDx = dx
+      const screenDy = -dy
+
+      // 7. Calculate angle: atan2(x, y) gives angle from positive Y-axis
+      // We want the long edge (width, which is along X-axis by default) to point north
+      // So we need to rotate by the angle from X-axis to north direction
+      // atan2(y, x) gives angle from X-axis
+      const angleRad = Math.atan2(screenDy, screenDx)
+      return angleRad * 180 / Math.PI
     },
     // Start real-time animation loop for FOV box rotation
     startFovAnimation () {
