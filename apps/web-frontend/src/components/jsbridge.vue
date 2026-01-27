@@ -676,35 +676,61 @@ export default {
       // 转换成毫秒值
       return m.utc().toDate().getTime()
     },
-    // 获取中心点的赤经赤纬
+    // 获取中心点的坐标（alt/az 地平坐标 + ra/dec 赤道坐标）
     getCenterRaDecValue: function () {
-      const yaw = this.$stel.core.observer.yaw
-      const pitch = this.$stel.core.observer.pitch
-      const vObs = this.$stel.s2c(-yaw, pitch)
+      const that = this
 
-      // J2000 (ICRF)
+      const formatInt = function (num, padLen) {
+        const pad = new Array(1 + padLen).join('0')
+        return (pad + num).slice(-pad.length)
+      }
+      const formatDec = function (a) {
+        const raf = that.$stel.a2af(a, 1)
+        var result = raf.sign + formatInt(raf.degrees, 2) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
+        return parseFloat(result)
+      }
+      const formatAz = function (a) {
+        const raf = that.$stel.a2af(a, 1)
+        var result = formatInt(raf.degrees < 0 ? raf.degrees + 360 : raf.degrees, 3) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
+        return parseFloat(result)
+      }
+      const formatRA = function (a) {
+        const raf = that.$stel.a2tf(a, 1)
+        const hour = raf.hours
+        const minute = raf.minutes * 100 / 60
+        const second = raf.seconds * 100 / 3600
+        return hour + minute / 100 + second / 10000
+      }
+
+      // 使用 VIEW frame 的中心 (0,0,-1) 转换到 OBSERVED 获取屏幕中心坐标
+      // 注意：在 VIEW frame 中，屏幕中心方向是 [0,0,-1]（指向观察者前方）
+      const vView = [0, 0, -1] // VIEW frame 中心方向
+      const vObs = this.$stel.convertFrame(this.$stel.core.observer, 'VIEW', 'OBSERVED', vView)
+
+      // 计算 Alt/Az
+      const azalt = this.$stel.c2s(vObs)
+
+      // 计算 J2000 (ICRF)
       const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
       const radecIcrf = this.$stel.c2s(vIcrf)
-      let raJ2000 = radecIcrf[0] * 12 / Math.PI
-      if (raJ2000 < 0) raJ2000 += 24
-      if (raJ2000 >= 24) raJ2000 -= 24
-      const decJ2000 = radecIcrf[1] * 180 / Math.PI
+      const raIcrf = this.$stel.anp(radecIcrf[0])
+      const decIcrf = this.$stel.anpm(radecIcrf[1])
 
-      // JNow
+      // 计算 JNow
       const vJnow = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'JNOW', vObs)
       const radecJnow = this.$stel.c2s(vJnow)
-      let raJnow = radecJnow[0] * 12 / Math.PI
-      if (raJnow < 0) raJnow += 24
-      if (raJnow >= 24) raJnow -= 24
-      const decJnow = radecJnow[1] * 180 / Math.PI
+      const raJnow = this.$stel.anp(radecJnow[0])
+      const decJnow = this.$stel.anpm(radecJnow[1])
 
       const result = {
-        ra: raJnow,
-        dec: decJnow,
-        ra_j2000: raJ2000,
-        dec_j2000: decJ2000
+        az: formatAz(this.$stel.anp(azalt[0])),
+        alt: formatDec(this.$stel.anpm(azalt[1])),
+        ra: formatRA(raJnow),
+        dec: formatDec(decJnow),
+        ra_j2000: formatRA(raIcrf),
+        dec_j2000: formatDec(decIcrf)
       }
-      console.log('getCenterRaDecValue result:', result)
+      console.log('getCenterRaDecValue result:', result.ra_j2000, result.dec_j2000)
       return result
     },
     setLocation: function (loc) {
