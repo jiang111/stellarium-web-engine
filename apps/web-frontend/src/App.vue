@@ -231,7 +231,7 @@ export default {
 
           /// 只有当挪动到指定区域的时候，才显示这个区域的图像
           that.$stel.core.constellations.show_only_pointed = true
-
+          that.$stel.core.constellations.images_visible = true
           that.setStateFromQueryArgs()
           that.guiComponent = 'Gui'
 
