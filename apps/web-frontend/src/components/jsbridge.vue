@@ -195,6 +195,7 @@ export default {
           arMode: this.$store.state.arMode,
           enableArMode: this.$store.state.appEnableARMode,
           currentLocation: this.getCenterRaDecValue(),
+          direction: ((this.$stel.core.observer.yaw * 180 / Math.PI) % 360 + 360) % 360,
           drawSelectedTargetLine: this.linesObj != null
         }
       this.updateFovBox()
