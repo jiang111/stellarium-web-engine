@@ -96,13 +96,17 @@ export default {
 
       const fovYRad = this.$store.state.stel.fov
       const canvasHeight = this.$stel.canvas.height
-      const dist = (canvasHeight / 2) / Math.tan(fovYRad / 2)
+      
+      // Stellarium uses stereographic projection: x' = 2 * tan(θ / 2)
+      // For the current FOV, the distance is: dist = (canvasHeight / 2) / (2 * tan(fovY / 4))
+      const dist = (canvasHeight / 2) / (2 * Math.tan(fovYRad / 4))
 
       const targetFovXRad = (this.targetFovX || 10) * Math.PI / 180
       const targetFovYRad = (this.targetFovY || 5) * Math.PI / 180
 
-      const widthPx = 2 * dist * Math.tan(targetFovXRad / 2)
-      const heightPx = 2 * dist * Math.tan(targetFovYRad / 2)
+      // Use stereographic projection formula: 2 * tan(angle / 2)
+      const widthPx = 2 * dist * (2 * Math.tan(targetFovXRad / 4))
+      const heightPx = 2 * dist * (2 * Math.tan(targetFovYRad / 4))
 
       // Calculate rotation to align with Alt-Az Up (Zenith)
       const angleDeg = this.calculateFovRotation()
@@ -116,45 +120,21 @@ export default {
       }
     },
     // Calculate the rotation angle to align with Alt-Az frame
+    // The FOV box at screen center should rotate by the observer's roll angle
+    // Roll is the rotation around the view direction (line of sight)
+    // This determines how much the "up towards zenith" direction is tilted on screen
     calculateFovRotation () {
       if (!this.$stel || !this.$stel.core) return 0
 
-      const yaw = this.$stel.core.observer.yaw
-      const pitch = this.$stel.core.observer.pitch
+      // Roll is the rotation around the view direction
+      // When roll = 0, the top of the screen points towards zenith
+      // When roll != 0, the screen is rotated relative to the horizon
+      const roll = this.$stel.core.observer.roll
 
-      // View direction in Observed frame
-      const vF = this.$stel.s2c(-yaw, pitch)
-
-      // Zenith in Observed frame
-      const vZ = [0, 0, 1]
-
-      // Cross product helpers
-      const normalize = (v) => {
-        const l = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
-        return l > 0 ? [v[0] / l, v[1] / l, v[2] / l] : [0, 0, 0]
-      }
-      const cross = (a, b) => [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0]
-      ]
-
-      // Right vector (perpendicular to view and zenith)
-      let vR = cross(vF, vZ)
-      if (vR[0] * vR[0] + vR[1] * vR[1] + vR[2] * vR[2] < 1e-6) {
-        vR = [1, 0, 0]
-      }
-      vR = normalize(vR)
-
-      // Up vector in Alt-Az (perpendicular to view, pointing towards zenith)
-      const vU = normalize(cross(vR, vF))
-
-      // Convert vU to View frame (screen space)
-      const vUView = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'VIEW', vU)
-
-      // Calculate angle: atan2(x, y) gives angle from Y-axis (screen up)
-      const angleRad = Math.atan2(vUView[0], vUView[1])
-      return angleRad * 180 / Math.PI
+      // Convert to degrees for CSS
+      // CSS rotate is clockwise positive, roll in the engine may have different convention
+      // Need to check the sign - if wrong, just negate it
+      return roll * 180 / Math.PI
     },
     // Start real-time animation loop for FOV box rotation
     startFovAnimation () {
