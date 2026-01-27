@@ -469,7 +469,8 @@ export default {
           }
         },
         unselect: () => {
-          this.$stel.core.selection = 0
+          this.$stel.core.selection = null
+          this.lastAlt = undefined
         },
         // updateFov 支持两种调用方式：
         // 1. updateFov(fovDeg) - 传入单个 fovY 度数

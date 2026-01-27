@@ -325,6 +325,15 @@ export default {
     },
     unselect: function () {
       this.$stel.core.selection = 0
+      if (this.$stel && this.$stel.core && this.$stel.core.observer) {
+        const yaw = this.$stel.core.observer.yaw
+        const pitch = this.$stel.core.observer.pitch
+        this.$stel.core.observer.yaw = yaw
+        this.$stel.core.observer.pitch = pitch
+      }
+      if (this.$store.state.appEnableARMode) {
+        this.$store.commit('setARMode', true)
+      }
     },
     lockToSelection: function () {
       if (this.$stel.core.selection) {
