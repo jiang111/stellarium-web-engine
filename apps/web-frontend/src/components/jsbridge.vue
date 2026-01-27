@@ -97,16 +97,16 @@ export default {
       const fovYRad = this.$store.state.stel.fov
       const canvasHeight = this.$stel.canvas.height
       
-      // Stellarium uses stereographic projection: x' = 2 * tan(θ / 2)
-      // For the current FOV, the distance is: dist = (canvasHeight / 2) / (2 * tan(fovY / 4))
-      const dist = (canvasHeight / 2) / (2 * Math.tan(fovYRad / 4))
-
+      // Stellarium uses stereographic projection: screenPos = 2 * tan(angle / 2)
+      // Calculate pixel size using the projection formula ratio:
+      // pixelSize / canvasHeight = tan(targetFov/4) / tan(currentFov/4)
+      
       const targetFovXRad = (this.targetFovX || 10) * Math.PI / 180
       const targetFovYRad = (this.targetFovY || 5) * Math.PI / 180
 
-      // Use stereographic projection formula: 2 * tan(angle / 2)
-      const widthPx = 2 * dist * (2 * Math.tan(targetFovXRad / 4))
-      const heightPx = 2 * dist * (2 * Math.tan(targetFovYRad / 4))
+      // Using stereographic projection ratio
+      const widthPx = canvasHeight * Math.tan(targetFovXRad / 4) / Math.tan(fovYRad / 4)
+      const heightPx = canvasHeight * Math.tan(targetFovYRad / 4) / Math.tan(fovYRad / 4)
 
       // Calculate rotation to align with Alt-Az Up (Zenith)
       const angleDeg = this.calculateFovRotation()
