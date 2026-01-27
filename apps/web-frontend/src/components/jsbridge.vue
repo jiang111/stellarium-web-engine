@@ -155,12 +155,14 @@ export default {
       const screenDx = dx
       const screenDy = -dy
 
-      // 7. Calculate angle: atan2(x, y) gives angle from positive Y-axis
-      // We want the long edge (width, which is along X-axis by default) to point north
-      // So we need to rotate by the angle from X-axis to north direction
-      // atan2(y, x) gives angle from X-axis
+      // 7. Calculate angle to align Top of FOV box towards north
+      // Default: Width (fovX) is X-axis, Height (fovY) is Y-axis (down)
+      // Top of box is -Y axis (up relative to box)
+      // We want Top (-Y) to point towards North
+      // Box X-axis (Width) is 90 degrees clockwise from Top (-Y)
+      // So if North is at angle 'a', we want X-axis at 'a + 90'
       const angleRad = Math.atan2(screenDy, screenDx)
-      return angleRad * 180 / Math.PI
+      return (angleRad * 180 / Math.PI) + 90
     },
     // Start real-time animation loop for FOV box rotation
     startFovAnimation () {
