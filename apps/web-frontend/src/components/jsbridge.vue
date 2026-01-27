@@ -563,8 +563,8 @@ export default {
           // 1. 转换坐标并生成虚线段 (Manual Dashing)
           const features = []
           const toRad = Math.PI / 180
-          const dashSizeDeg = 0.5 // 虚线实线部分长度 (度)
-          const gapSizeDeg = 1.0 // 虚线间隔部分长度 (度)
+          const dashSizeDeg = 0.2 // 虚线实线部分长度 (度)
+          const gapSizeDeg = 0.2 // 虚线间隔部分长度 (度)
           const dashRad = dashSizeDeg * toRad
           const gapRad = gapSizeDeg * toRad
 

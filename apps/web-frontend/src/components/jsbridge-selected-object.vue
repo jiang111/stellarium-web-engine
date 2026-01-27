@@ -109,11 +109,22 @@ export default {
       }
       // 获取 Ra/Dec (赤经赤纬)
       if (obj) {
-        const radecCIRS = this.$stel.c2s(obj.getInfo('radec'))
-        const raCIRS = this.$stel.anp(radecCIRS[0])
-        const decCIRS = this.$stel.anpm(radecCIRS[1])
-        result.ra = formatRA(raCIRS)
-        result.dec = formatDec(decCIRS)
+        // Get J2000 (ICRF) vector
+        const vIcrf = obj.getInfo('radec')
+        const radecIcrf = this.$stel.c2s(vIcrf)
+        const raIcrf = this.$stel.anp(radecIcrf[0])
+        const decIcrf = this.$stel.anpm(radecIcrf[1])
+
+        // Get JNow vector
+        const vJnow = this.$stel.convertFrame(this.$stel.core.observer, 'ICRF', 'JNOW', vIcrf)
+        const radecJnow = this.$stel.c2s(vJnow)
+        const raJnow = this.$stel.anp(radecJnow[0])
+        const decJnow = this.$stel.anpm(radecJnow[1])
+
+        result.ra = formatRA(raJnow)
+        result.dec = formatDec(decJnow)
+        result.ra_j2000 = formatRA(raIcrf)
+        result.dec_j2000 = formatDec(decIcrf)
 
         // 获取 Az/Alt (方位角/高度角)
         const azalt = this.$stel.c2s(this.$stel.convertFrame(this.$stel.core.observer, 'ICRF', 'OBSERVED', obj.getInfo('radec')))
