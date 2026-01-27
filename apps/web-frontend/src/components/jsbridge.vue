@@ -682,22 +682,29 @@ export default {
         return hour + minute / 100 + second / 10000
       }
 
-      // 使用 VIEW frame 的中心 (0,0,-1) 转换到 OBSERVED 获取屏幕中心坐标
-      // 注意：在 VIEW frame 中，屏幕中心方向是 [0,0,-1]（指向观察者前方）
-      const vView = [0, 0, -1] // VIEW frame 中心方向
-      const vObs = this.$stel.convertFrame(this.$stel.core.observer, 'VIEW', 'OBSERVED', vView)
+      let vIcrf
+      // 如果有选中的天体（锁定状态），直接使用天体的 ICRF 坐标以避免转换误差
+      if (this.$stel.core.selection) {
+        const obj = this.$stel.core.selection
+        vIcrf = obj.getInfo('radec')
+      } else {
+        // 没有锁定时，使用 VIEW frame 的中心 (0,0,-1) 转换获取
+        const vView = [0, 0, -1] // VIEW frame 中心方向
+        const vObs = this.$stel.convertFrame(this.$stel.core.observer, 'VIEW', 'OBSERVED', vView)
+        vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
+      }
 
-      // 计算 Alt/Az
+      // 计算 Alt/Az（从 ICRF 转换到 OBSERVED）
+      const vObs = this.$stel.convertFrame(this.$stel.core.observer, 'ICRF', 'OBSERVED', vIcrf)
       const azalt = this.$stel.c2s(vObs)
 
       // 计算 J2000 (ICRF)
-      const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
       const radecIcrf = this.$stel.c2s(vIcrf)
       const raIcrf = this.$stel.anp(radecIcrf[0])
       const decIcrf = this.$stel.anpm(radecIcrf[1])
 
       // 计算 JNow
-      const vJnow = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'JNOW', vObs)
+      const vJnow = this.$stel.convertFrame(this.$stel.core.observer, 'ICRF', 'JNOW', vIcrf)
       const radecJnow = this.$stel.c2s(vJnow)
       const raJnow = this.$stel.anp(radecJnow[0])
       const decJnow = this.$stel.anpm(radecJnow[1])
