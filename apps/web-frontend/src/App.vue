@@ -131,12 +131,6 @@ export default {
 
       if (!this.initDone) {
         this.$stel.core.time_speed = 1
-        let d = new Date()
-        if (this.$route.query.date) {
-          d = new Moment(this.$route.query.date).toDate()
-          this.$stel.core.observer.utc = d.getMJD()
-          this.startTimeIsSet = true
-        }
 
         if (this.$route.query.lng && this.$route.query.lat) {
           const pos = { lat: Number(this.$route.query.lat), lng: Number(this.$route.query.lng), alt: this.$route.query.elev ? Number(this.$route.query.elev) : 0, accuracy: 1 }
@@ -200,7 +194,7 @@ export default {
       // At startup, we need to wait for the location to be set before deciding which
       // startup time to set so that it's night time.
       if (!this.startTimeIsSet) {
-        this.$stel.core.observer.utc = swh.getTimeAfterSunset(this.$stel)
+        // this.$stel.core.observer.utc = swh.getTimeAfterSunset(this.$stel)
         this.startTimeIsSet = true
       }
       // Init of time and date is complete
