@@ -41,6 +41,7 @@ export default {
         border: '1px solid rgba(244, 129, 35, 0.7)',
         transform: 'rotate(0deg)'
       },
+      manualCenterRotation: null,
       fovAnimationId: null
     }
   },
@@ -119,7 +120,63 @@ export default {
       const heightPx = clientHeight * Math.tan(targetFovYRad / 4) / Math.tan(currentFovYRad / 4)
 
       // Calculate rotation to align with Alt-Az Up (Zenith)
-      const angleDeg = this.calculateFovRotation()
+      let angleDeg = 0
+      if (this.manualCenterRotation !== null && this.manualCenterRotation !== undefined) {
+        // If manual rotation is provided (Indigo PA), use it directly.
+        // PA=0 means North-Up.
+        // Our FOV Box: Width (X) is initially horizontal. Height (Y) is vertical.
+        // CSS Rotation 0deg: X points Right, Y points Down.
+        // We want Top (-Y) to point North when PA=0.
+        // If PA=0: Top(-Y) -> North. Right(X) -> East.
+        // Standard CSS 0deg: Top is Up (Screen Up).
+        // Wait, calculateFovRotation returns CSS rotation angle to align Top to North.
+        // If we have a PA, we want Top to point PA degrees E of N?
+        // No, PA describes the camera rotation.
+        // If PA=0: Top points North.
+        // If PA=90: Top points East.
+        // calculateFovRotation calculates angle "a" such that rotating by "a" aligns Top to North.
+        // If we want Top to be at PA (relative to North), we need to rotate by (AngleToNorth + PA)?
+        // BUT, the request says "If I give you an angle... draw it".
+        // If using `drawRectWithAltAndAz` logic (vector basis), rotation is handled in 3D.
+        // Here in `updateFovBox`, we are in 2D screen space + CSS rotation.
+        // We first align Top to North, THEN apply PA rotation?
+        // Yes: calculateFovRotation gets us to "Top = North".
+        // Then we add manualCenterRotation (PA).
+        // Let's verify direction: PA is E of N (CCW on sky? No, PA is usually East of North).
+        // On screen (looking at sky), East is Left?
+        // Stellarium: East is Left. West is Right.
+        // PA definition: "Angle ... E of N".
+        // 0 = N, 90 = E.
+        // In screen space (Y down):
+        // North is some direction. East is -90 deg from North?
+        // Let's look at `calculateFovRotation`:
+        // "Box X-axis (Width) is 90 degrees clockwise from Top (-Y)"
+        // "We want Top (-Y) to point towards North"
+        // It returns (angleRad * 180 / Math.PI) + 90.
+        // This suggests it aligns X-axis to East (if N is Up).
+        // If we add PA:
+        // If PA=90 (East), Top should point East.
+        // Original aligns Top to North.
+        // To make Top point East, we rotate -90 degrees? (Since East is Left/CCW?)
+        // Or +90?
+        // PA: N -> E -> S -> W.
+        // On Sky Map (inside sphere): N is Up. E is Left.
+        // So PA=90 means pointing Left.
+        // CSS Rotation: +Degrees is CW.
+        // So to point Left (East), we need -90 deg relative to North?
+        // Let's assume standard PA usage:
+        // We take the "North Aligned" angle, and subtract PA?
+        // Or add?
+        // Let's try subtracting PA (since +PA is East/Left, and +CSS is CW/Right).
+        const angleToNorth = this.calculateFovRotation()
+        // angleToNorth makes Top point North.
+        // If PA=90, we want Top to point East (Left).
+        // CSS rotation to left is -90.
+        // So angle = angleToNorth - PA.
+        angleDeg = angleToNorth - this.manualCenterRotation
+      } else {
+        angleDeg = this.calculateFovRotation()
+      }
 
       this.fovBoxStyle = {
         width: widthPx + 'px',
@@ -285,14 +342,15 @@ export default {
           if (typeof data === 'boolean') {
             this.showCenterFov = data
           } else if (typeof data === 'object') {
-            if (data.showCenter !== undefined) {
-              this.showCenterFov = data.showCenter
-            }
+            this.showCenterFov = true
             if (data.fovX !== undefined) {
               this.targetFovX = Number(data.fovX)
             }
             if (data.fovY !== undefined) {
               this.targetFovY = Number(data.fovY)
+            }
+            if (data.rotation !== undefined) {
+              this.manualCenterRotation = data.rotation
             }
           }
 
@@ -312,6 +370,7 @@ export default {
           const az = Number(ss.az)
           const fovX = Number(ss.fovX)
           const fovY = Number(ss.fovY)
+          const rotation = ss.rotation !== undefined ? Number(ss.rotation) : (ss.angle !== undefined ? Number(ss.angle) : null)
 
           if (isNaN(alt) || isNaN(az) || isNaN(fovX) || isNaN(fovY)) {
             return
@@ -364,8 +423,106 @@ export default {
           }
 
           vR = normalize(vR)
+          vR = normalize(vR)
           // Up vector (vU) completes the orthonormal basis
-          const vU = normalize(cross(vR, vF))
+          let vU = normalize(cross(vR, vF))
+
+          // Apply Rotation if provided (PA: E of N)
+          if (rotation !== null && !isNaN(rotation)) {
+            // Rotation logic:
+            // vR points East (relative to North)
+            // vU points North
+            // PA = 0 -> Top(vU) points North.
+            // PA = 90 -> Top(vU) points East(vR).
+            // On the sky (looking from center), East is "Left" if North is "Up"?
+            // Wait, standard vectors:
+            // vNorthObs points to Celestial North.
+            // vR = vNorthObs x vF. (North x View).
+            // If View is "Out of screen", North is Up.
+            // Up x Out = Right. So vR points "West"?
+            // Let's check: Right hand rule.
+            // North(Index) x View(Middle) -> Right(Thumb).
+            // If looking at sky: North is Up. View is towards sky.
+            // N x V -> West (Right side of screen).
+            // So vR points West.
+            // vU = vR x vF = West x View = Down (South).
+            // Wait, let's re-verify `vR = cross(vNorthObs, vF)`
+            // Usually East vector is `vNorth x vZenith` (for Az). Here we use `vCurrentView`.
+            // `vNorth` (Up) x `vView` (Forward).
+            // If we look at North Horizon. N=[1,0,0]? No, let's assume standard frame.
+            // If vR points West.
+            // Then vU = vR x vF = West x View = Down?
+            // If we want vU to point North.
+            // vU_north = vF x vR = View x West = Up (North).
+            // Let's check original code:
+            // `const vU = normalize(cross(vR, vF))`
+            // If vR is West, vR x vF -> South (Down).
+            // If vR is East (let's say we defined it that way?), then East x View -> North (Up).
+            // Is `vNorthObs x vF` East or West?
+            // N x V.
+            // If N is Up, V is In(Forward). N x V = Left (East).
+            // If N is Up, V is Out(Backward?).
+            // Let's assume standard Right Handed system.
+            // If vR points East.
+            // vU = vR x vF = East x View -> North.
+            // So vU aligns with North. vR aligns with East.
+
+            // We want Rotation Angle (PA) = 0 => Top points North.
+            // Top of Rect is defined by `c1` etc?
+            // `c1 ... add(scale(vU, tanY))` -> vU component is positive Y in rect space.
+            // So "Up" in rect space corresponds to vU direction.
+            // So if PA=0, vU should point North. The current basis (vR, vU) does this (assuming vR=East, vU=North).
+
+            // PA = 90 => Top points East.
+            // We need vU_new to point East (which is vR).
+            // So we rotate basis vectors.
+            // vU_new = vU * cos(90) + vR * sin(90) = vR. (Correct)
+            // vR_new = vR * cos(90) - vU * sin(90) = -vU (South? or West?)
+            // Vector rotation in plane defined by vR, vU.
+            // Rotated basis:
+            // vU' = vU cos(a) + vR sin(a)
+            // vR' = vR cos(a) - vU sin(a)
+            // (Standard rotation of axes or vector? We rotate the vector vU towards vR).
+            // PA measures N -> E.
+            // vU is N. vR is E.
+            // So rotating N towards E is +angle.
+            // Yes.
+
+            // const theta = -(rotation * toRad) // Wait, why negative?
+            // If we rotate vU towards vR (N to E) by rotation angle.
+            // vU_new = vU cos(r) + vR sin(r).
+            // Let's use `theta = rotation * toRad`.
+            // vU_new = vU cos - vR sin ??
+            // Let's test:
+            // r=90. vU_new = vR.
+            // vR_new = -vU.
+            // In rect:
+            // p = vF + vR_new * x + vU_new * y.
+            // Top (y>0): moves along vU_new (East).
+            // Right (x>0): moves along vR_new (South).
+            // So Top points East. Right points South.
+            // This corresponds to 90 deg rotation.
+            // So theta = rotation * toRad.
+
+            const rRad = rotation * toRad
+            const cosA = Math.cos(rRad)
+            const sinA = Math.sin(rRad)
+
+            // Create new basis
+            // Note: pure vector addition
+            const vRNew = [
+              vR[0] * cosA - vU[0] * sinA,
+              vR[1] * cosA - vU[1] * sinA,
+              vR[2] * cosA - vU[2] * sinA
+            ]
+            const vUNew = [
+              vU[0] * cosA + vR[0] * sinA,
+              vU[1] * cosA + vR[1] * sinA,
+              vU[2] * cosA + vR[2] * sinA
+            ]
+            vR = vRNew
+            vU = vUNew
+          }
 
           // 3. Calculate 4 corners on Tangent Plane (Camera FOV)
           // Gnomonic projection: distance = tan(angle)
