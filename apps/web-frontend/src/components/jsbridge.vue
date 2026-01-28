@@ -2,6 +2,7 @@
   <div class="jsbridge-overlay"
        style="overflow: hidden; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
     <div v-if="showCenterFov" :style="fovBoxStyle"></div>
+    <div v-if="showOffCenterRect" :style="offCenterRectStyle"></div>
   </div>
 </template>
 <script>
@@ -45,7 +46,19 @@ export default {
       },
       manualCenterRotation: null,
       fovAnimationId: null,
-      lastRectParams: null
+      lastRectParams: null,
+      showOffCenterRect: false,
+      offCenterRectStyle: {
+        position: 'absolute',
+        width: '0px',
+        height: '0px',
+        background: 'rgba(60, 131, 255, 0.1)',
+        border: '2px solid rgba(60, 131, 255, 0.7)',
+        transform: 'translate(-50%, -50%) rotate(0deg)',
+        left: '50%',
+        top: '50%'
+      },
+      offCenterRectParams: null
     }
   },
   mounted () {
@@ -65,6 +78,7 @@ export default {
   },
   methods: {
     updateFov (data) {
+      console.log('updateFov called with:', data)
       let fovYDeg
 
       if (typeof data === 'object' && data !== null) {
@@ -81,6 +95,7 @@ export default {
 
       // 限制范围
       fovYDeg = this.getFovLimit(fovYDeg)
+      console.log('updateFov: fovYDeg after limit:', fovYDeg)
 
       this.$stel.zoomTo(fovYDeg * Math.PI / 180, 0.5)
       this.updateState()
@@ -239,11 +254,150 @@ export default {
       const angleRad = Math.atan2(screenDy, screenDx)
       return (angleRad * 180 / Math.PI) + 90
     },
+    // Update off-center rectangle position and size using DOM (like updateFovBox)
+    updateOffCenterRect () {
+      if (!this.showOffCenterRect || !this.offCenterRectParams || !this.$stel || !this.$stel.canvas) {
+        return
+      }
+
+      const { alt, az, fovX, fovY, rotation } = this.offCenterRectParams
+      const toRad = Math.PI / 180
+
+      // 1. Convert Alt/Az to direction vector in OBSERVED frame
+      const azR = az * toRad
+      const altR = alt * toRad
+      const vObserved = this.$stel.s2c(azR, altR)
+
+      // 2. Convert to VIEW frame
+      const obs = this.$stel.core.observer
+      const vView = this.$stel.convertFrame(obs, 'OBSERVED', 'VIEW', vObserved)
+
+      // 3. Check if the point is in front of the camera (z < 0 in VIEW frame means visible)
+      if (vView[2] >= 0) {
+        // Point is behind the camera, hide the rect
+        this.offCenterRectStyle = {
+          ...this.offCenterRectStyle,
+          display: 'none'
+        }
+        return
+      }
+
+      // 4. Project to screen coordinates using Stellarium's projection
+      // The simplest approach: use the canvas project function if available
+      // Alternative: manual projection using stereographic formula
+
+      // Get canvas dimensions
+      const canvas = this.$stel.canvas
+      const clientWidth = canvas.clientWidth
+      const clientHeight = canvas.clientHeight
+
+      // Simple perspective projection from VIEW frame to screen
+      // VIEW frame: z points towards viewer, x points right, y points up
+      // Screen: origin at top-left, x points right, y points down
+      // For stereographic projection: r = 2 * f * tan(theta/2) where theta is angle from center
+
+      // Using the stereographic projection formula
+      const fovYRad = this.$store.state.stel.fov
+      // Calculate the focal length in pixels
+      // In stereographic projection: r_screen = 2 * f * tan(theta/2)
+      // At the edge, theta = fov/2, r_screen = height/2
+      // So: height/2 = 2 * f * tan(fov/4)
+      // f = height / (4 * tan(fov/4))
+      const focalLength = clientHeight / (4 * Math.tan(fovYRad / 4))
+
+      // Project the center point
+      // vView is [x, y, z] where z is negative for visible points
+      // Stereographic projection: screen_x = 2 * f * (vView.x / (1 - vView.z/|v|))
+      const vNorm = Math.sqrt(vView[0] * vView[0] + vView[1] * vView[1] + vView[2] * vView[2])
+      const factor = 2 * focalLength / (1 - vView[2] / vNorm)
+      const screenX = clientWidth / 2 + factor * vView[0]
+      const screenY = clientHeight / 2 - factor * vView[1] // Y is flipped
+
+      // 5. Calculate rectangle size in screen pixels
+      // Use the same formula as updateFovBox
+      const targetFovXRad = fovX * toRad
+      const targetFovYRad = fovY * toRad
+
+      // Account for aspect ratio in FOV calculation
+      const aspect = canvas.width / canvas.height
+      let currentFovYRad = fovYRad
+      if (aspect < 1) {
+        currentFovYRad = 4 * Math.atan(Math.tan(fovYRad / 4) / aspect)
+      }
+
+      const widthPx = clientHeight * Math.tan(targetFovXRad / 4) / Math.tan(currentFovYRad / 4)
+      const heightPx = clientHeight * Math.tan(targetFovYRad / 4) / Math.tan(currentFovYRad / 4)
+
+      // 6. Calculate rotation angle
+      // Similar to calculateFovRotation but at the specified Alt/Az position
+      let angleDeg = 0
+      if (rotation !== null && rotation !== undefined && !isNaN(rotation)) {
+        // If manual rotation is provided, use it relative to North
+        const angleToNorth = this.calculateFovRotationAt(az, alt)
+        angleDeg = angleToNorth - rotation
+      } else {
+        angleDeg = this.calculateFovRotationAt(az, alt)
+      }
+
+      // 7. Update style
+      this.offCenterRectStyle = {
+        position: 'absolute',
+        width: widthPx + 'px',
+        height: heightPx + 'px',
+        background: 'rgba(60, 131, 255, 0.1)',
+        border: '2px solid rgba(60, 131, 255, 0.7)',
+        transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
+        left: screenX + 'px',
+        top: screenY + 'px',
+        display: 'block'
+      }
+    },
+    // Calculate FOV rotation at a specific Alt/Az position
+    calculateFovRotationAt (azDeg, altDeg) {
+      if (!this.$stel || !this.$stel.core) return 0
+
+      const obs = this.$stel.core.observer
+      const toRad = Math.PI / 180
+
+      // 1. Get position in ICRF coordinates
+      const azR = azDeg * toRad
+      const altR = altDeg * toRad
+      const vObserved = this.$stel.s2c(azR, altR)
+      const vCenterIcrf = this.$stel.convertFrame(obs, 'OBSERVED', 'ICRF', vObserved)
+
+      // 2. Calculate current position's RA/Dec
+      const radec = this.$stel.c2s(vCenterIcrf)
+      const ra = radec[0]
+      const dec = radec[1]
+
+      // 3. Create a point slightly north (higher dec) along the same RA
+      const decOffset = 0.01 // Small offset in radians (~0.5 degrees)
+      const northPointIcrf = this.$stel.s2c(ra, dec + decOffset)
+
+      // 4. Convert both points to VIEW frame
+      const centerView = this.$stel.convertFrame(obs, 'ICRF', 'VIEW', vCenterIcrf)
+      const northView = this.$stel.convertFrame(obs, 'ICRF', 'VIEW', northPointIcrf)
+
+      // 5. Calculate direction vector in VIEW frame
+      const dx = northView[0] - centerView[0]
+      const dy = northView[1] - centerView[1]
+
+      // 6. Convert to screen coordinates (Y is flipped in screen space)
+      const screenDx = dx
+      const screenDy = -dy
+
+      // 7. Calculate angle to align Top of FOV box towards north
+      const angleRad = Math.atan2(screenDy, screenDx)
+      return (angleRad * 180 / Math.PI) + 90
+    },
     // Start real-time animation loop for FOV box rotation
     startFovAnimation () {
       const animate = () => {
         if (this.showCenterFov) {
           this.updateFovBox()
+        }
+        if (this.showOffCenterRect) {
+          this.updateOffCenterRect()
         }
         this.fovAnimationId = requestAnimationFrame(animate)
       }
@@ -400,7 +554,7 @@ export default {
           if (newFov < 10) newFov = 10
           if (newFov > 180) newFov = 180
 
-          const currentFov = this.getFovY()
+          const currentFov = this.$store.state.stel.fov * 180 / Math.PI
           console.log('scaleFov2Target: angleDeg:', angleDeg, 'newFov:', newFov, 'currentFov:', currentFov)
 
           if (currentFov > newFov) {
@@ -408,16 +562,13 @@ export default {
             return
           }
 
+          console.log('scaleFov2Target: calling updateFov with', newFov)
           this.updateFov(newFov)
+          console.log('scaleFov2Target: updateFov called')
         },
         /// 根据 app 的赤道仪的位置，实时绘制一个矩形，表示当前相机的视场范围
+        /// 使用 DOM 元素渲染，避免大 FOV 时的形变
         drawRectWithAltAndAz: (ss) => {
-          // 清除之前的矩形
-          if (this.currentRectLayer && this.currentRectObj) {
-            this.currentRectLayer.remove(this.currentRectObj)
-            this.currentRectObj = null
-          }
-
           const alt = Number(ss.alt)
           const az = Number(ss.az)
           let fovX = Number(ss.fovX)
@@ -428,228 +579,25 @@ export default {
           const rotation = ss.rotation !== undefined ? Number(ss.rotation) : (ss.angle !== undefined ? Number(ss.angle) : null)
 
           if (isNaN(alt) || isNaN(az) || isNaN(fovX) || isNaN(fovY)) {
+            this.showOffCenterRect = false
             return
           }
 
           if (fovX < 0 || fovY < 0) {
+            this.showOffCenterRect = false
             return
           }
 
-          this.lastRectParams = { alt, az, fovX, fovY }
-
-          const toRad = Math.PI / 180
-
-          // Vector helpers
-          const normalize = (v) => {
-            const l = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
-            return l > 0 ? [v[0] / l, v[1] / l, v[2] / l] : [0, 0, 0]
-          }
-          const cross = (a, b) => [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0]
-          ]
-          const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-          const scale = (v, s) => [v[0] * s, v[1] * s, v[2] * s]
-
-          // 1. Calculate Center Vector (View Direction) in Observed Frame
-          const azR = az * toRad
-          const altR = alt * toRad
-          // s2c returns direction vector from spherical coords.
-          // Note: Stellarium az usually needs negation for standard math or check s2c impl.
-          // Based on gotoByAltAndAz: yaw = -az, pitch = alt.
-          // Let's rely on s2c to handle the frame correctly if we pass consistent args.
-          const vF = this.$stel.s2c(azR, altR)
-
-          // 2. Define Local Tangent Plane Basis
-          // We want fovX (width, along vR) to be perpendicular to the direction of standard North (ra=0, dec=90)
-          // Use JNOW frame to account for precession (current date North Pole)
-
-          // Get Celestial North Pole (ra=0, dec=90) in JNOW [0, 0, 1]
-          // Convert to OBSERVED frame
-          const vNorthJnow = [0, 0, 1]
-          const vNorthObs = this.$stel.convertFrame(this.$stel.core.observer, 'JNOW', 'OBSERVED', vNorthJnow)
-
-          // Calculate Right vector (vR)
-          // vR = vNorthObs x vF (This points "East" relative to the North Pole direction)
-          let vR = cross(vNorthObs, vF)
-
-          // Handle singularity if looking directly at North Pole or South Pole
-          if (vR[0] * vR[0] + vR[1] * vR[1] + vR[2] * vR[2] < 1e-6) {
-            const vZ = [0, 0, 1]
-            vR = cross(vZ, vF)
-            if (vR[0] * vR[0] + vR[1] * vR[1] + vR[2] * vR[2] < 1e-6) {
-              vR = [1, 0, 0]
-            }
-          }
-
-          vR = normalize(vR)
-          vR = normalize(vR)
-          // Up vector (vU) completes the orthonormal basis
-          let vU = normalize(cross(vR, vF))
-
-          // Apply Rotation if provided (PA: E of N)
-          if (rotation !== null && !isNaN(rotation)) {
-            // Rotation logic:
-            // vR points East (relative to North)
-            // vU points North
-            // PA = 0 -> Top(vU) points North.
-            // PA = 90 -> Top(vU) points East(vR).
-            // On the sky (looking from center), East is "Left" if North is "Up"?
-            // Wait, standard vectors:
-            // vNorthObs points to Celestial North.
-            // vR = vNorthObs x vF. (North x View).
-            // If View is "Out of screen", North is Up.
-            // Up x Out = Right. So vR points "West"?
-            // Let's check: Right hand rule.
-            // North(Index) x View(Middle) -> Right(Thumb).
-            // If looking at sky: North is Up. View is towards sky.
-            // N x V -> West (Right side of screen).
-            // So vR points West.
-            // vU = vR x vF = West x View = Down (South).
-            // Wait, let's re-verify `vR = cross(vNorthObs, vF)`
-            // Usually East vector is `vNorth x vZenith` (for Az). Here we use `vCurrentView`.
-            // `vNorth` (Up) x `vView` (Forward).
-            // If we look at North Horizon. N=[1,0,0]? No, let's assume standard frame.
-            // If vR points West.
-            // Then vU = vR x vF = West x View = Down?
-            // If we want vU to point North.
-            // vU_north = vF x vR = View x West = Up (North).
-            // Let's check original code:
-            // `const vU = normalize(cross(vR, vF))`
-            // If vR is West, vR x vF -> South (Down).
-            // If vR is East (let's say we defined it that way?), then East x View -> North (Up).
-            // Is `vNorthObs x vF` East or West?
-            // N x V.
-            // If N is Up, V is In(Forward). N x V = Left (East).
-            // If N is Up, V is Out(Backward?).
-            // Let's assume standard Right Handed system.
-            // If vR points East.
-            // vU = vR x vF = East x View -> North.
-            // So vU aligns with North. vR aligns with East.
-
-            // We want Rotation Angle (PA) = 0 => Top points North.
-            // Top of Rect is defined by `c1` etc?
-            // `c1 ... add(scale(vU, tanY))` -> vU component is positive Y in rect space.
-            // So "Up" in rect space corresponds to vU direction.
-            // So if PA=0, vU should point North. The current basis (vR, vU) does this (assuming vR=East, vU=North).
-
-            // PA = 90 => Top points East.
-            // We need vU_new to point East (which is vR).
-            // So we rotate basis vectors.
-            // vU_new = vU * cos(90) + vR * sin(90) = vR. (Correct)
-            // vR_new = vR * cos(90) - vU * sin(90) = -vU (South? or West?)
-            // Vector rotation in plane defined by vR, vU.
-            // Rotated basis:
-            // vU' = vU cos(a) + vR sin(a)
-            // vR' = vR cos(a) - vU sin(a)
-            // (Standard rotation of axes or vector? We rotate the vector vU towards vR).
-            // PA measures N -> E.
-            // vU is N. vR is E.
-            // So rotating N towards E is +angle.
-            // Yes.
-
-            // const theta = -(rotation * toRad) // Wait, why negative?
-            // If we rotate vU towards vR (N to E) by rotation angle.
-            // vU_new = vU cos(r) + vR sin(r).
-            // Let's use `theta = rotation * toRad`.
-            // vU_new = vU cos - vR sin ??
-            // Let's test:
-            // r=90. vU_new = vR.
-            // vR_new = -vU.
-            // In rect:
-            // p = vF + vR_new * x + vU_new * y.
-            // Top (y>0): moves along vU_new (East).
-            // Right (x>0): moves along vR_new (South).
-            // So Top points East. Right points South.
-            // This corresponds to 90 deg rotation.
-            // So theta = rotation * toRad.
-
-            const rRad = rotation * toRad
-            const cosA = Math.cos(rRad)
-            const sinA = Math.sin(rRad)
-
-            // Create new basis
-            // Note: pure vector addition
-            const vRNew = [
-              vR[0] * cosA - vU[0] * sinA,
-              vR[1] * cosA - vU[1] * sinA,
-              vR[2] * cosA - vU[2] * sinA
-            ]
-            const vUNew = [
-              vU[0] * cosA + vR[0] * sinA,
-              vU[1] * cosA + vR[1] * sinA,
-              vU[2] * cosA + vR[2] * sinA
-            ]
-            vR = vRNew
-            vU = vUNew
-          }
-
-          // 3. Calculate 4 corners on Tangent Plane (Camera FOV)
-          // Gnomonic projection: distance = tan(angle)
-          const tanX = Math.tan((fovX / 2) * toRad)
-          const tanY = Math.tan((fovY / 2) * toRad)
-
-          // Corners relative to vF
-          // p = vF + vR*tx + vU*ty
-          const c1 = normalize(add(vF, add(scale(vR, -tanX), scale(vU, tanY)))) // Top-Left
-          const c2 = normalize(add(vF, add(scale(vR, tanX), scale(vU, tanY)))) // Top-Right
-          const c3 = normalize(add(vF, add(scale(vR, tanX), scale(vU, -tanY)))) // Bottom-Right
-          const c4 = normalize(add(vF, add(scale(vR, -tanX), scale(vU, -tanY))))// Bottom-Left
-
-          // 4. Convert to ICRF (Ra/Dec)
-          const vecToRaDec = (vObs) => {
-            const vIcrf = this.$stel.convertFrame(this.$stel.core.observer, 'OBSERVED', 'ICRF', vObs)
-            const radec = this.$stel.c2s(vIcrf)
-            return [radec[0] / toRad, radec[1] / toRad]
-          }
-
-          const p1 = vecToRaDec(c1)
-          const p2 = vecToRaDec(c2)
-          const p3 = vecToRaDec(c3)
-          const p4 = vecToRaDec(c4)
-
-          const features = [{
-            type: 'Feature',
-            properties: {
-              stroke: '#3C83FF',
-              'stroke-width': 2,
-              'fill-opacity': 0.1,
-              fill: '#3C83FF'
-            },
-            geometry: {
-              type: 'Polygon',
-              coordinates: [[p1, p4, p3, p2, p1]]
-            }
-          }]
-
-          const geojsonData = {
-            type: 'FeatureCollection',
-            features: features
-          }
-
-          // 获取或创建 layer
-          let layer = this.currentRectLayer
-          if (!layer) {
-            // 尝试获取现有 layer，如果之前的状态没有保存的话
-            layer = this.$stel.getObj('jsbridge-rects')
-            if (!layer) {
-              layer = this.$stel.createLayer({
-                id: 'jsbridge-rects',
-                z: 40,
-                visible: true
-              })
-            }
-            this.currentRectLayer = layer
-          }
-          layer.visible = true
-
-          const rectObj = this.$stel.createObj('geojson', {
-            data: geojsonData
-          })
-
-          layer.add(rectObj)
-          this.currentRectObj = rectObj
+          this.lastRectParams = { alt, az, fovX, fovY, rotation }
+          // Store params for animation loop update
+          this.offCenterRectParams = { alt, az, fovX, fovY, rotation }
+          this.showOffCenterRect = true
+          this.updateOffCenterRect()
+        },
+        // 清除 off-center 矩形
+        clearOffCenterRect: () => {
+          this.showOffCenterRect = false
+          this.offCenterRectParams = null
         },
         // 仅用于配置星图的 armode,和 app 本身的 armode 没关系
         updateArMode: (v) => {
