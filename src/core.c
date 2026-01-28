@@ -118,6 +118,8 @@ void core_get_proj(projection_t *proj)
     double aspect = core->win_size[0] / core->win_size[1];
     double mat[4][4] = MAT4_IDENTITY;
     projection_compute_fovs(core->proj, core->fov, aspect, &fovx, &fovy);
+    core->fov_x = fovx;
+    core->fov_y = fovy;
     projection_init(proj, core->proj, fovy,
                     core->win_size[0], core->win_size[1]);
 
@@ -1016,6 +1018,8 @@ static obj_klass_t core_klass = {
         PROPERTY(observer, TYPE_OBJ, MEMBER(core_t, observer)),
         PROPERTY(fov, TYPE_ANGLE, MEMBER(core_t, fov),
                  .on_changed = core_on_fov_changed),
+        PROPERTY(fovX, TYPE_ANGLE, MEMBER(core_t, fov_x)),
+        PROPERTY(fovY, TYPE_ANGLE, MEMBER(core_t, fov_y)),
         PROPERTY(projection, TYPE_INT, MEMBER(core_t, proj)),
         PROPERTY(selection, TYPE_OBJ, MEMBER(core_t, selection)),
         PROPERTY(lock, TYPE_OBJ, MEMBER(core_t, target.lock)),

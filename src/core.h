@@ -56,6 +56,8 @@ struct core
     obj_t           obj;
     observer_t      *observer;
     double          fov;
+    double          fov_x;
+    double          fov_y;
 
     // Two parameters to manually adjust the size of the stars.
     double          star_linear_scale;
