@@ -551,7 +551,7 @@ export default {
           // 4. Calculate new FOV based on distance
           // To see a target at angleDeg from center, FOV needs to be at least 2*angleDeg
           // Add 20% margin so the target is not at the edge
-          let newFov = angleDeg * 1.2
+          let newFov = angleDeg * 1.5
 
           if (newFov < 10) newFov = 10
           if (newFov > 180) newFov = 180
