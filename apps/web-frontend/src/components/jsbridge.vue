@@ -438,6 +438,10 @@ export default {
             return
           }
 
+          if (fovX < 0 || fovY < 0) {
+            return
+          }
+
           this.lastRectParams = { alt, az, fovX, fovY }
 
           const toRad = Math.PI / 180
