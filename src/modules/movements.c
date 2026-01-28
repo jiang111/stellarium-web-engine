@@ -80,10 +80,14 @@ static int on_click(const gesture_t *gest, void *user)
 static int on_pinch(const gesture_t *gest, void *user)
 {
     static double start_fov = 0;
+    projection_t proj;
     if (gest->state == GESTURE_BEGIN) {
         start_fov = core->fov;
     }
     core->fov = start_fov / gest->pinch;
+    core_get_proj(&proj);
+    core->fov = clamp(core->fov, proj.klass->min_ui_fov ?: CORE_MIN_FOV,
+                      proj.klass->max_ui_fov);
     module_changed((obj_t*)core, "fov");
     return 0;
 }
@@ -151,7 +155,8 @@ static int movements_on_zoom(obj_t *obj, double k, double x, double y)
     screen_to_mount(core->observer, &proj, VEC(x, y), pos_start);
     obj_get_attr(&core->obj, "fov", &fov);
     fov /= k;
-    fov = clamp(fov, CORE_MIN_FOV, proj.klass->max_ui_fov);
+    fov = clamp(fov, proj.klass->min_ui_fov ?: CORE_MIN_FOV,
+                proj.klass->max_ui_fov);
     obj_set_attr(&core->obj, "fov", fov);
     core_get_proj(&proj);
     screen_to_mount(core->observer, &proj, VEC(x, y), pos_end);

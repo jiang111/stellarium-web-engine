@@ -92,6 +92,7 @@ static const projection_klass_t proj_stereographic_klass = {
     .id             = PROJ_STEREOGRAPHIC,
     .max_fov        = 360. * DD2R,
     .max_ui_fov     = 180. * DD2R,
+    .min_ui_fov     = 1. * DD2R,
     .init           = proj_stereographic_init,
     .project        = proj_stereographic_project,
     .backward       = proj_stereographic_backward,

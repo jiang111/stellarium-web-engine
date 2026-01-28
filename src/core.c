@@ -21,7 +21,8 @@ static void core_on_fov_changed(obj_t *obj, const attribute_t *attr)
     // For the moment there is not point going further than 0.5°.
     projection_t proj;
     core_get_proj(&proj);
-    core->fov = clamp(core->fov, CORE_MIN_FOV, proj.klass->max_fov);
+    core->fov = clamp(core->fov, proj.klass->min_ui_fov ?: CORE_MIN_FOV,
+                      proj.klass->max_ui_fov);
 }
 
 static void add_progressbar(void *user, const char *id, const char *label,
