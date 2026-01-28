@@ -1,6 +1,6 @@
 <template>
   <div class="jsbridge-overlay"
-       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
+       style="overflow: hidden; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
     <div v-if="showCenterFov" :style="fovBoxStyle"></div>
   </div>
 </template>
@@ -309,7 +309,6 @@ export default {
           const fovY = Number(ss.fovY)
 
           if (isNaN(alt) || isNaN(az) || isNaN(fovX) || isNaN(fovY)) {
-            console.warn('drawRectWithAltAndAz: Invalid parameters', ss)
             return
           }
 
@@ -458,7 +457,6 @@ export default {
           this.$stel.core.observer.pitch = ss.alt * 0.017453292519943295
         },
         gotoAndLock: (ss) => {
-          // console.log('JSBridge gotoAndLock:', ss)
           if (ss.model === 'custom') {
             const raDeg = ss.model_data.ra
             const decDeg = ss.model_data.dec
@@ -512,7 +510,6 @@ export default {
             fovYDeg = Number(data.fovY * 2)
 
             if (isNaN(fovYDeg)) {
-              console.warn('updateFov: Invalid fovY', data)
               return
             }
           } else {
@@ -528,7 +525,6 @@ export default {
           this.updateState()
         },
         setLocation: (loc) => {
-          console.log('JSBridge setLocation:', loc)
           this.setLocation(loc)
           this.updateState()
         },
@@ -585,7 +581,6 @@ export default {
           } = data
 
           if (!pointsList || pointsList.length < 2) {
-            console.warn('drawLines: Need at least 2 points')
             return
           }
 
@@ -765,7 +760,6 @@ export default {
         ra_j2000: formatRA(raIcrf),
         dec_j2000: formatDec(decIcrf)
       }
-      console.log('getCenterRaDecValue result:', result.ra_j2000, result.dec_j2000)
       return result
     },
     setLocation: function (loc) {

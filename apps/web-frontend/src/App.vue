@@ -327,12 +327,11 @@ a:link {
 }
 
 html {
-  overflow-y: visible;
+  overflow: hidden;
 }
 
 html, body, #app {
-  overflow-y: visible!important;
-  overflow-x: visible;
+  overflow: hidden!important;
   position: fixed!important;
   width: 100%;
   height: 100%;
