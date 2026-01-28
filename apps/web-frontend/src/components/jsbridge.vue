@@ -42,7 +42,8 @@ export default {
         transform: 'rotate(0deg)'
       },
       manualCenterRotation: null,
-      fovAnimationId: null
+      fovAnimationId: null,
+      lastRectParams: null
     }
   },
   mounted () {
@@ -61,6 +62,28 @@ export default {
     }
   },
   methods: {
+    updateFov (data) {
+      let fovYDeg
+
+      if (typeof data === 'object' && data !== null) {
+        // 处理 {fovX, fovY} 对象参数，直接使用 fovY
+        fovYDeg = Number(data.fovY * 2)
+
+        if (isNaN(fovYDeg)) {
+          return
+        }
+      } else {
+        // 处理单个数值参数（传统方式，fovY）
+        fovYDeg = Number(data)
+      }
+
+      // 限制范围
+      if (fovYDeg < 0.01) fovYDeg = 0.01
+      if (fovYDeg > 180) fovYDeg = 180
+
+      this.$stel.zoomTo(fovYDeg * Math.PI / 180, 0.5)
+      this.updateState()
+    },
     azAltToObserved (azimuth, altitude) {
       const cosAlt = Math.cos(altitude)
       return [
@@ -358,6 +381,45 @@ export default {
             this.updateFovBox()
           }
         },
+        scaleFov2Target: () => {
+          console.log('scaleFov2Target called. lastRectParams:', this.lastRectParams)
+          if (!this.lastRectParams) {
+            console.warn('scaleFov2Target: No lastRectParams')
+            return
+          }
+
+          // 1. Get Center View Vector in OBSERVED frame
+          const vCenterView = [0, 0, -1]
+          const vCenterObs = this.$stel.convertFrame(this.$stel.core.observer, 'VIEW', 'OBSERVED', vCenterView)
+
+          // 2. Get Target Vector in OBSERVED frame
+          const { alt, az } = this.lastRectParams
+          const toRad = Math.PI / 180
+          const vTargetObs = this.$stel.s2c(az * toRad, alt * toRad)
+
+          // 3. Calculate Angle
+          const dot = vCenterObs[0] * vTargetObs[0] + vCenterObs[1] * vTargetObs[1] + vCenterObs[2] * vTargetObs[2]
+          const val = Math.min(Math.max(dot, -1), 1)
+          const angleRad = Math.acos(val)
+          const angleDeg = angleRad / toRad
+
+          // 4. Calculate new FOV based on distance
+          // Target factor: 2.2 * distance (closer fit)
+          let newFov = angleDeg * 1.2
+
+          if (newFov < 10) newFov = 10
+          if (newFov > 180) newFov = 180
+
+          const currentFov = this.getFovY()
+          console.log('scaleFov2Target: angleDeg:', angleDeg, 'newFov:', newFov, 'currentFov:', currentFov)
+
+          if (currentFov > newFov) {
+            console.log('scaleFov2Target: currentFov > newFov, ignoring')
+            return
+          }
+
+          this.updateFov(newFov)
+        },
         /// 根据 app 的赤道仪的位置，实时绘制一个矩形，表示当前相机的视场范围
         drawRectWithAltAndAz: (ss) => {
           // 清除之前的矩形
@@ -375,6 +437,8 @@ export default {
           if (isNaN(alt) || isNaN(az) || isNaN(fovX) || isNaN(fovY)) {
             return
           }
+
+          this.lastRectParams = { alt, az, fovX, fovY }
 
           const toRad = Math.PI / 180
 
@@ -665,26 +729,7 @@ export default {
         // 2. updateFov({fovX, fovY}) - 传入包含 fovX 和 fovY 的对象
         // 使用 fovY 作为垂直视场角，与 drawRectWithAltAndAz 保持一致
         updateFov: (data) => {
-          let fovYDeg
-
-          if (typeof data === 'object' && data !== null) {
-            // 处理 {fovX, fovY} 对象参数，直接使用 fovY
-            fovYDeg = Number(data.fovY * 2)
-
-            if (isNaN(fovYDeg)) {
-              return
-            }
-          } else {
-            // 处理单个数值参数（传统方式，fovY）
-            fovYDeg = Number(data)
-          }
-
-          // 限制范围
-          if (fovYDeg < 0.01) fovYDeg = 0.01
-          if (fovYDeg > 180) fovYDeg = 180
-
-          this.$stel.zoomTo(fovYDeg * Math.PI / 180, 0.5)
-          this.updateState()
+          this.updateFov(data)
         },
         setLocation: (loc) => {
           this.setLocation(loc)
