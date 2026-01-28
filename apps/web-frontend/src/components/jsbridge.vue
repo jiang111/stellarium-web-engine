@@ -538,26 +538,32 @@ export default {
           const vCenterObs = this.$stel.convertFrame(this.$stel.core.observer, 'VIEW', 'OBSERVED', vCenterView)
 
           // 2. Get Target Vector in OBSERVED frame
-          const { alt, az } = this.lastRectParams
+          const { alt, az, fovX, fovY } = this.lastRectParams
           const toRad = Math.PI / 180
           const vTargetObs = this.$stel.s2c(az * toRad, alt * toRad)
 
-          // 3. Calculate Angle
+          // 3. Calculate Angle between current view center and target center
           const dot = vCenterObs[0] * vTargetObs[0] + vCenterObs[1] * vTargetObs[1] + vCenterObs[2] * vTargetObs[2]
           const val = Math.min(Math.max(dot, -1), 1)
           const angleRad = Math.acos(val)
           const angleDeg = angleRad / toRad
 
-          // 4. Calculate new FOV based on distance
-          // To see a target at angleDeg from center, FOV needs to be at least 2*angleDeg
-          // Add 20% margin so the target is not at the edge
-          let newFov = angleDeg * 1.5
+          // 4. Calculate new FOV based on:
+          // - The angle from view center to target center
+          // - The target rectangle's own size (need to see the entire rectangle)
+          // The target's furthest corner is approximately at: angleDeg + max(fovX, fovY)/2
+          const targetHalfSize = Math.max(fovX || 0, fovY || 0) / 2
+          const maxDistance = angleDeg + targetHalfSize
+
+          // To see a point at maxDistance from center, FOV needs to be 2 * maxDistance
+          // Add 20% margin so the target is not at the very edge
+          let newFov = maxDistance * 1.5
 
           if (newFov < 10) newFov = 10
           if (newFov > 180) newFov = 180
 
           const currentFov = this.$store.state.stel.fov * 180 / Math.PI
-          console.log('scaleFov2Target: angleDeg:', angleDeg, 'newFov:', newFov, 'currentFov:', currentFov)
+          console.log('scaleFov2Target: angleDeg:', angleDeg, 'targetHalfSize:', targetHalfSize, 'newFov:', newFov, 'currentFov:', currentFov)
 
           if (currentFov > newFov) {
             console.log('scaleFov2Target: currentFov > newFov, ignoring')
