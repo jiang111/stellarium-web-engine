@@ -73,6 +73,8 @@ struct projection_klass
     double max_fov;
     // Maximum FOV that looks good for the UI.
     double max_ui_fov;
+    // Minimum FOV that looks good for the UI.
+    double min_ui_fov;
     void (*init)(projection_t *proj, double fovy, double aspect);
 
     /*
