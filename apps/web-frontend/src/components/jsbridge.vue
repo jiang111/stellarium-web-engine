@@ -83,7 +83,7 @@ export default {
 
       if (typeof data === 'object' && data !== null) {
         // 处理 {fovX, fovY} 对象参数，直接使用 fovY
-        fovYDeg = Number(data.fovY * 2)
+        fovYDeg = Number(data.fovY)
 
         if (isNaN(fovYDeg)) {
           return
@@ -94,7 +94,8 @@ export default {
       }
 
       // 限制范围
-      fovYDeg = this.getFovLimit(fovYDeg)
+      if (fovYDeg < 0.1) fovYDeg = 0.1
+      if (fovYDeg > 180) fovYDeg = 180
       console.log('updateFov: fovYDeg after limit:', fovYDeg)
 
       this.$stel.zoomTo(fovYDeg * Math.PI / 180, 0.5)
@@ -548,7 +549,8 @@ export default {
           const angleDeg = angleRad / toRad
 
           // 4. Calculate new FOV based on distance
-          // Target factor: 2.2 * distance (closer fit)
+          // To see a target at angleDeg from center, FOV needs to be at least 2*angleDeg
+          // Add 20% margin so the target is not at the edge
           let newFov = angleDeg * 1.2
 
           if (newFov < 10) newFov = 10
