@@ -30,9 +30,7 @@ if len(sys.argv) > 1:
     ROOT = sys.argv[1]
     DEST = sys.argv[2]
 
-if os.path.dirname(__file__) != "./tools":
-    print("Should be run from root directory")
-    sys.exit(-1)
+
 
 TYPES = {
     "png": {"text": False, "compress": False},

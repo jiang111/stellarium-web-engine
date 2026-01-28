@@ -560,7 +560,7 @@ static const unsigned char DATA_shaders_planet_glsl[7260] __attribute__((aligned
 
 ASSET_REGISTER(shaders_planet_glsl, "shaders/planet.glsl", DATA_shaders_planet_glsl, false)
 
-static const unsigned char DATA_shaders_points_glsl[1361] __attribute__((aligned(4))) =
+static const unsigned char DATA_shaders_points_glsl[1364] __attribute__((aligned(4))) =
     "/* Stellarium Web Engine - Copyright (c) 2022 - Stellarium Labs SRL\n"
     " *\n"
     " * This program is licensed under the terms of the GNU AGPL v3, or\n"
@@ -616,7 +616,7 @@ static const unsigned char DATA_shaders_points_glsl[1361] __attribute__((aligned
     "    k = smoothstep(u_core_size * 1.25, u_core_size * 0.75, dist);\n"
     "\n"
     "    // Halo\n"
-    "    k += smoothstep(1.0, 0.0, dist) * 0.08;\n"
+    "    // k += smoothstep(1.0, 0.0, dist) * 0.08;\n"
     "    gl_FragColor.rgb = v_color.rgb;\n"
     "    gl_FragColor.a = v_color.a * clamp(k, 0.0, 1.0);\n"
     "}\n"
