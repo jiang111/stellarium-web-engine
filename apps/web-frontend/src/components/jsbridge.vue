@@ -47,6 +47,7 @@ export default {
       manualCenterRotation: null,
       fovAnimationId: null,
       lastRectParams: null,
+      savedFovBeforeScale: null,
       showOffCenterRect: false,
       offCenterRectStyle: {
         position: 'absolute',
@@ -570,9 +571,23 @@ export default {
             return
           }
 
+          // 保存当前 FOV，用于之后恢复
+          this.savedFovBeforeScale = currentFov
+          console.log('scaleFov2Target: saved currentFov for restore:', this.savedFovBeforeScale)
+
           console.log('scaleFov2Target: calling updateFov with', newFov)
           this.updateFov(newFov)
           console.log('scaleFov2Target: updateFov called')
+        },
+        // 恢复 scaleFov2Target 执行前的 FOV 值
+        restoreScaledFov: () => {
+          if (this.savedFovBeforeScale === null) {
+            console.warn('restoreFov: No saved FOV to restore')
+            return
+          }
+          console.log('restoreFov: restoring FOV to', this.savedFovBeforeScale)
+          this.updateFov(this.savedFovBeforeScale)
+          this.savedFovBeforeScale = null
         },
         /// 根据 app 的赤道仪的位置，实时绘制一个矩形，表示当前相机的视场范围
         /// 使用 DOM 元素渲染，避免大 FOV 时的形变
