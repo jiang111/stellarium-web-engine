@@ -54,7 +54,7 @@ export default {
         width: '0px',
         height: '0px',
         background: 'rgba(60, 131, 255, 0.1)',
-        border: '2px solid rgba(60, 131, 255, 0.7)',
+        border: '1px solid rgba(60, 131, 255, 0.7)',
         transform: 'translate(-50%, -50%) rotate(0deg)',
         left: '50%',
         top: '50%'
@@ -347,7 +347,7 @@ export default {
         width: widthPx + 'px',
         height: heightPx + 'px',
         background: 'rgba(60, 131, 255, 0.1)',
-        border: '2px solid rgba(60, 131, 255, 0.7)',
+        border: '1px solid rgba(60, 131, 255, 0.7)',
         transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
         left: screenX + 'px',
         top: screenY + 'px',

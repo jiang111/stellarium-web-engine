@@ -384,4 +384,25 @@ html, body, #app {
   min-height: 100%!important;
 }
 
+/* 确保所有容器都禁用 scrollbar */
+.v-application,
+.v-main,
+.v-main__wrap,
+.container,
+.v-container {
+  overflow: hidden!important;
+}
+
+/* 隐藏所有滚动条（WebKit 浏览器） */
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: none;
+}
+
 </style>

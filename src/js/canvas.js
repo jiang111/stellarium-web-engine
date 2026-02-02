@@ -105,7 +105,9 @@ Module.afterInit(function() {
       }
     }, {passive: true});
     canvas.addEventListener('touchmove', function(e) {
-      e.preventDefault();
+      if (e.cancelable) {
+        e.preventDefault();
+      }
       var rect = canvas.getBoundingClientRect();
       for (var i = 0; i < e.changedTouches.length; i++) {
         var id = e.changedTouches[i].identifier;
