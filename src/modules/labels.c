@@ -7,6 +7,9 @@
  * repository.
  */
 
+// Configurable fixed label size in pixels
+#define FIXED_LABEL_SIZE 15.0
+
 #include "swe.h"
 
 
@@ -166,21 +169,6 @@ static int labels_render(obj_t *obj, const painter_t *painter_)
     const double max_overlap = 8;
     painter_t painter = *painter_;
 
-    // Calculate FOV-based scaling factor for text size.
-    // Reference FOV: 60 degrees (about 1.047 radians).
-    // When FOV increases (zoomed out), text becomes smaller.
-    // When FOV decreases (zoomed in), text becomes larger.
-    double fov_scale = 1.0;
-    if (painter.proj) {
-        const double ref_fov = 60.0 * M_PI / 180.0;  // 60 degrees reference
-        double current_fov = painter.proj->fovy;
-        if (current_fov > 0) {
-            fov_scale = ref_fov / current_fov;  // Inverse: smaller FOV = larger text
-            // Clamp the scale factor: allow shrink to 0.5x, but limit growth to 1.2x
-            fov_scale = fmax(0.5, fmin(fov_scale, 1.2));
-        }
-    }
-
     // Order labels to render them from far to near.
     DL_SORT(g_labels->labels, label_cmp);
     DL_FOREACH(g_labels->labels, label) {
@@ -198,11 +186,8 @@ static int labels_render(obj_t *obj, const painter_t *painter_)
         painter.flags &= ~PAINTER_ENABLE_DEPTH;
         label_apply_radius_offset(label, pos);
 
-        // Apply FOV scaling to text size
-        double scaled_size = label->size * fov_scale;
-
         paint_text_bounds(&painter, label->render_text, pos, label->align,
-                          label->effects, scaled_size, label->bounds);
+                          label->effects, label->size, label->bounds);
         label->fader.target = label->active &&
                                 (test_label_overlaps(label) <= max_overlap);
 
@@ -212,7 +197,7 @@ static int labels_render(obj_t *obj, const painter_t *painter_)
             label->fader.target = false;
         }
         paint_text(&painter, label->render_text, pos, NULL,
-                   label->align, label->effects, scaled_size,
+                   label->align, label->effects, label->size,
                    label->angle);
     }
     return 0;
@@ -253,7 +238,7 @@ void labels_add_3d(const char *text, int frame, const double pos[3],
 
     if (!text || !*text) return;
 
-    label = label_get(g_labels->labels, text, size, obj);
+    label = label_get(g_labels->labels, text, FIXED_LABEL_SIZE, obj);
     if (!label) {
         label = calloc(1, sizeof(*label));
         label->obj = obj_retain(obj);
@@ -270,7 +255,7 @@ void labels_add_3d(const char *text, int frame, const double pos[3],
     label->frame = frame;
     label->at_inf = at_inf;
     label->radius = radius;
-    label->size = size;
+    label->size = FIXED_LABEL_SIZE;  // Use configurable fixed size
     vec4_set(label->color, color[0], color[1], color[2], color[3]);
     label->angle = angle;
     label->align = align;
