@@ -33,8 +33,8 @@ export default {
       lastStableAzimuth: 0,
       lastAlt: undefined,
       showCenterFov: true,
-      targetFovX: 10,
-      targetFovY: 5,
+      targetFovX: -1,
+      targetFovY: -1,
       minFov: 0.1,
       maxFov: 50,
       fovBoxStyle: {
@@ -45,6 +45,7 @@ export default {
         transform: 'rotate(0deg)'
       },
       manualCenterRotation: null,
+      isCenterCircle: false,
       fovAnimationId: null,
       lastRectParams: null,
       savedFovBeforeScale: null,
@@ -213,6 +214,7 @@ export default {
         height: heightPx + 'px',
         background: 'rgba(244, 129, 35, 0.1)',
         border: '1px solid rgba(244, 129, 35, 0.7)',
+        borderRadius: this.isCenterCircle ? '50%' : '0',
         transform: `rotate(${angleDeg}deg)`
       }
     },
@@ -262,7 +264,7 @@ export default {
         return
       }
 
-      const { alt, az, fovX, fovY, rotation } = this.offCenterRectParams
+      const { alt, az, fovX, fovY, rotation, isCircle } = this.offCenterRectParams
       const toRad = Math.PI / 180
 
       // 1. Convert Alt/Az to direction vector in OBSERVED frame
@@ -348,6 +350,7 @@ export default {
         height: heightPx + 'px',
         background: 'rgba(60, 131, 255, 0.1)',
         border: '1px solid rgba(60, 131, 255, 0.7)',
+        borderRadius: isCircle ? '50%' : '0',
         transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
         left: screenX + 'px',
         top: screenY + 'px',
@@ -510,16 +513,29 @@ export default {
         toggleCenterFov: (data) => {
           if (typeof data === 'boolean') {
             this.showCenterFov = data
+            this.isCenterCircle = false
           } else if (typeof data === 'object') {
             this.showCenterFov = true
-            if (data.fovX !== undefined) {
-              this.targetFovX = this.getFovLimit(Number(data.fovX))
-            }
-            if (data.fovY !== undefined) {
-              this.targetFovY = this.getFovLimit(Number(data.fovY))
+            const fovX = Number(data.fovX)
+            const fovY = Number(data.fovY)
+            // 当 fovX 和 fovY 都为 -1 时，绘制一个 2° 的圆
+            if (fovX === -1 && fovY === -1) {
+              this.targetFovX = 2
+              this.targetFovY = 2
+              this.isCenterCircle = true
+            } else {
+              if (data.fovX !== undefined) {
+                this.targetFovX = this.getFovLimit(fovX)
+              }
+              if (data.fovY !== undefined) {
+                this.targetFovY = this.getFovLimit(fovY)
+              }
+              this.isCenterCircle = false
             }
             if (data.rotation !== undefined) {
               this.manualCenterRotation = data.rotation
+            } else {
+              this.manualCenterRotation = null
             }
           }
 
@@ -596,24 +612,32 @@ export default {
           const az = Number(ss.az)
           let fovX = Number(ss.fovX)
           let fovY = Number(ss.fovY)
-          fovX = this.getFovLimit(fovX)
-          fovY = this.getFovLimit(fovY)
 
           const rotation = ss.rotation !== undefined ? Number(ss.rotation) : (ss.angle !== undefined ? Number(ss.angle) : null)
 
-          if (isNaN(alt) || isNaN(az) || isNaN(fovX) || isNaN(fovY)) {
+          if (isNaN(alt) || isNaN(az)) {
             this.showOffCenterRect = false
             return
           }
 
-          if (fovX < 0 || fovY < 0) {
-            this.showOffCenterRect = false
-            return
+          // 当 fovX 和 fovY 都为 -1 时，绘制一个 2° 的圆
+          let isCircle = false
+          if (fovX === -1 && fovY === -1) {
+            fovX = 2
+            fovY = 2
+            isCircle = true
+          } else {
+            if (isNaN(fovX) || isNaN(fovY) || fovX < 0 || fovY < 0) {
+              this.showOffCenterRect = false
+              return
+            }
+            fovX = this.getFovLimit(fovX)
+            fovY = this.getFovLimit(fovY)
           }
 
           this.lastRectParams = { alt, az, fovX, fovY, rotation }
           // Store params for animation loop update
-          this.offCenterRectParams = { alt, az, fovX, fovY, rotation }
+          this.offCenterRectParams = { alt, az, fovX, fovY, rotation, isCircle }
           this.showOffCenterRect = true
           this.updateOffCenterRect()
         },
