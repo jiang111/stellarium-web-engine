@@ -1125,26 +1125,22 @@ export default {
     getCenterRaDecValue: function () {
       const that = this
 
-      const formatInt = function (num, padLen) {
-        const pad = new Array(1 + padLen).join('0')
-        return (pad + num).slice(-pad.length)
-      }
       const formatDec = function (a) {
         const raf = that.$stel.a2af(a, 1)
-        var result = raf.sign + formatInt(raf.degrees, 2) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
-        return parseFloat(result)
+        // 正确转换：十进制度 = degrees + arcminutes/60 + arcseconds/3600
+        const decimalDegrees = Math.abs(raf.degrees) + raf.arcminutes / 60 + raf.arcseconds / 3600
+        return raf.sign === '-' ? -decimalDegrees : decimalDegrees
       }
       const formatAz = function (a) {
         const raf = that.$stel.a2af(a, 1)
-        var result = formatInt(raf.degrees < 0 ? raf.degrees + 360 : raf.degrees, 3) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
-        return parseFloat(result)
+        // 正确转换：十进制度 = degrees + arcminutes/60 + arcseconds/3600
+        const degrees = raf.degrees < 0 ? raf.degrees + 360 : raf.degrees
+        return degrees + raf.arcminutes / 60 + raf.arcseconds / 3600
       }
       const formatRA = function (a) {
         const raf = that.$stel.a2tf(a, 1)
-        const hour = raf.hours
-        const minute = raf.minutes * 100 / 60
-        const second = raf.seconds * 100 / 3600
-        return hour + minute / 100 + second / 10000
+        // 正确转换：十进制小时 = hours + minutes/60 + seconds/3600
+        return raf.hours + raf.minutes / 60 + raf.seconds / 3600
       }
 
       let vIcrf

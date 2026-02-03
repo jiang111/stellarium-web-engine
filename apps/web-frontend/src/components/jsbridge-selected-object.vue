@@ -84,11 +84,8 @@ export default {
         culturalNames: newObject.culturalNames || [],
         model: newObject.model || '',
         types: newObject.types || [],
-        model_data: newObject.model_data || {}
-      }
-      const formatInt = function (num, padLen) {
-        const pad = new Array(1 + padLen).join('0')
-        return (pad + num).slice(-pad.length)
+        model_data: newObject.model_data || {},
+        horizons_id: newObject.model_data?.horizons_id || null
       }
       const formatRA = function (a) {
         const raf = that.$stel.a2tf(a, 1)
@@ -99,13 +96,15 @@ export default {
       }
       const formatDec = function (a) {
         const raf = that.$stel.a2af(a, 1)
-        var result = raf.sign + formatInt(raf.degrees, 2) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
-        return parseFloat(result)
+        // 正确转换：十进制度 = degrees + arcminutes/60 + arcseconds/3600
+        const decimalDegrees = Math.abs(raf.degrees) + raf.arcminutes / 60 + raf.arcseconds / 3600
+        return raf.sign === '-' ? -decimalDegrees : decimalDegrees
       }
       const formatAz = function (a) {
         const raf = that.$stel.a2af(a, 1)
-        var result = formatInt(raf.degrees < 0 ? raf.degrees + 360 : raf.degrees, 3) + '.' + formatInt(raf.arcminutes, 2) + formatInt(raf.arcseconds, 2)
-        return parseFloat(result)
+        // 正确转换：十进制度 = degrees + arcminutes/60 + arcseconds/3600
+        const degrees = raf.degrees < 0 ? raf.degrees + 360 : raf.degrees
+        return degrees + raf.arcminutes / 60 + raf.arcseconds / 3600
       }
       // 获取 Ra/Dec (赤经赤纬)
       if (obj) {
