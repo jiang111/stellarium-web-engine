@@ -1,11 +1,11 @@
 class StellariumBridge {
   // 发送消息给 App
   postMessage (action, data = {}) {
-    const message = { action, data }
+    const message = JSON.stringify({ action, data })
     if (window.webkit?.messageHandlers?.stellarium) {
       window.webkit.messageHandlers.stellarium.postMessage(message)
     } else if (window.stellarium) {
-      window.stellarium.postMessage(JSON.stringify(message))
+      window.stellarium.postMessage(message)
     }
   }
 
