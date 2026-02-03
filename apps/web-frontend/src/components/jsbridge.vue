@@ -1,8 +1,12 @@
 <template>
   <div class="jsbridge-overlay"
        style="overflow: hidden; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
-    <div v-if="showCenterFov" :style="fovBoxStyle"></div>
+    <div v-if="showCenterFov && !showMosaic" :style="fovBoxStyle"></div>
     <div v-if="showOffCenterRect" :style="offCenterRectStyle"></div>
+    <!-- Mosaic Grid -->
+    <div v-for="tile in mosaicTiles" :key="tile.index" :style="tile.style" class="mosaic-tile">
+      <span class="mosaic-label">{{ tile.index }}</span>
+    </div>
   </div>
 </template>
 <script>
@@ -60,7 +64,15 @@ export default {
         left: '50%',
         top: '50%'
       },
-      offCenterRectParams: null
+      offCenterRectParams: null,
+      // 马赛克网格数据
+      showMosaic: false,
+      mosaicConfig: {
+        x: 1, // 横向个数
+        y: 1, // 纵向个数
+        overlap: 10 // 重叠百分比
+      },
+      mosaicTiles: [] // 存储每个 tile 的样式和信息
     }
   },
   mounted () {
@@ -404,6 +416,9 @@ export default {
         if (this.showOffCenterRect) {
           this.updateOffCenterRect()
         }
+        if (this.showMosaic) {
+          this.updateMosaic()
+        }
         this.fovAnimationId = requestAnimationFrame(animate)
       }
       this.fovAnimationId = requestAnimationFrame(animate)
@@ -414,6 +429,180 @@ export default {
         cancelAnimationFrame(this.fovAnimationId)
         this.fovAnimationId = null
       }
+    },
+    // 更新马赛克网格
+    updateMosaic () {
+      if (!this.showMosaic || !this.$stel || !this.$stel.canvas) {
+        this.mosaicTiles = []
+        return
+      }
+
+      const { x, y, overlap } = this.mosaicConfig
+      if (x <= 0 || y <= 0) {
+        this.mosaicTiles = []
+        return
+      }
+
+      const canvas = this.$stel.canvas
+      const clientWidth = canvas.clientWidth
+      const clientHeight = canvas.clientHeight
+
+      // 获取当前 FOV
+      const fovYRad = this.$store.state.stel.fov
+      const aspect = canvas.width / canvas.height
+      let currentFovYRad = fovYRad
+      if (aspect < 1) {
+        currentFovYRad = 4 * Math.atan(Math.tan(fovYRad / 4) / aspect)
+      }
+
+      // 单个 tile 的角度大小（与 centerFov 相同）
+      const targetFovXRad = (this.targetFovX || 10) * Math.PI / 180
+      const targetFovYRad = (this.targetFovY || 5) * Math.PI / 180
+
+      // 计算单个 tile 的屏幕尺寸
+      const tileWidthPx = clientHeight * Math.tan(targetFovXRad / 4) / Math.tan(currentFovYRad / 4)
+      const tileHeightPx = clientHeight * Math.tan(targetFovYRad / 4) / Math.tan(currentFovYRad / 4)
+
+      // 计算有效步进（考虑重叠）
+      const overlapFactor = 1 - overlap / 100
+      const stepX = tileWidthPx * overlapFactor
+      const stepY = tileHeightPx * overlapFactor
+
+      // 生成 tiles
+      const tiles = []
+      let index = 1
+
+      // 获取中心 FOV 框的旋转角度（作为参考）
+      const centerRotation = this.calculateFovRotation()
+
+      for (let row = 0; row < y; row++) {
+        for (let col = 0; col < x; col++) {
+          // 计算相对于中心的偏移（未旋转）
+          const offsetX = (col - (x - 1) / 2) * stepX
+          const offsetY = (row - (y - 1) / 2) * stepY
+
+          // 应用中心旋转变换来获得屏幕位置
+          const rotRad = centerRotation * Math.PI / 180
+          const rotatedOffsetX = offsetX * Math.cos(rotRad) - offsetY * Math.sin(rotRad)
+          const rotatedOffsetY = offsetX * Math.sin(rotRad) + offsetY * Math.cos(rotRad)
+
+          // 屏幕坐标（相对于画布中心）
+          const screenX = clientWidth / 2 + rotatedOffsetX
+          const screenY = clientHeight / 2 + rotatedOffsetY
+
+          // 计算该 tile 中心的 RA/Dec 和 Alt/Az
+          const tileCenter = this.screenToRaDec(screenX, screenY)
+
+          // 计算该 tile 位置的独立 PA
+          let tileRotation = centerRotation
+          if (tileCenter && tileCenter.az !== undefined && tileCenter.alt !== undefined) {
+            tileRotation = this.calculateFovRotationAt(tileCenter.az, tileCenter.alt)
+            // 如果有手动设置的旋转角度，应用它
+            if (this.manualCenterRotation !== null && this.manualCenterRotation !== undefined) {
+              tileRotation = tileRotation - this.manualCenterRotation
+            }
+          }
+
+          tiles.push({
+            index,
+            col,
+            row,
+            screenX,
+            screenY,
+            ra: tileCenter ? tileCenter.ra : null,
+            dec: tileCenter ? tileCenter.dec : null,
+            az: tileCenter ? tileCenter.az : null,
+            alt: tileCenter ? tileCenter.alt : null,
+            pa: tileRotation,
+            style: {
+              position: 'absolute',
+              width: tileWidthPx + 'px',
+              height: tileHeightPx + 'px',
+              left: screenX + 'px',
+              top: screenY + 'px',
+              transform: `translate(-50%, -50%) rotate(${tileRotation}deg)`,
+              border: '1px dashed rgba(244, 129, 35, 0.7)',
+              background: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box'
+            }
+          })
+          index++
+        }
+      }
+
+      this.mosaicTiles = tiles
+    },
+    // 将屏幕坐标转换为 RA/Dec 和 Alt/Az
+    screenToRaDec (screenX, screenY) {
+      if (!this.$stel || !this.$stel.canvas) return null
+
+      const canvas = this.$stel.canvas
+      const clientWidth = canvas.clientWidth
+      const clientHeight = canvas.clientHeight
+
+      // 屏幕坐标到归一化坐标
+      const ndcX = (screenX - clientWidth / 2) / (clientHeight / 2)
+      const ndcY = -(screenY - clientHeight / 2) / (clientHeight / 2)
+
+      // 使用 stereographic 逆投影
+      const fovYRad = this.$store.state.stel.fov
+      const r = Math.sqrt(ndcX * ndcX + ndcY * ndcY)
+      const theta = 4 * Math.atan(r * Math.tan(fovYRad / 4))
+
+      if (r < 1e-6) {
+        // 屏幕中心
+        const vView = [0, 0, -1]
+        const obs = this.$stel.core.observer
+        const vObs = this.$stel.convertFrame(obs, 'VIEW', 'OBSERVED', vView)
+        const vIcrf = this.$stel.convertFrame(obs, 'OBSERVED', 'ICRF', vObs)
+
+        const radec = this.$stel.c2s(vIcrf)
+        const azalt = this.$stel.c2s(vObs)
+
+        return {
+          ra: radec[0] * 180 / Math.PI,
+          dec: radec[1] * 180 / Math.PI,
+          az: this.$stel.anp(azalt[0]) * 180 / Math.PI,
+          alt: azalt[1] * 180 / Math.PI
+        }
+      }
+
+      // 方向向量（VIEW frame）
+      const sinTheta = Math.sin(theta)
+      const cosTheta = Math.cos(theta)
+      const vView = [
+        sinTheta * ndcX / r,
+        sinTheta * ndcY / r,
+        -cosTheta
+      ]
+
+      const obs = this.$stel.core.observer
+      const vObs = this.$stel.convertFrame(obs, 'VIEW', 'OBSERVED', vView)
+      const vIcrf = this.$stel.convertFrame(obs, 'OBSERVED', 'ICRF', vObs)
+
+      const radec = this.$stel.c2s(vIcrf)
+      const azalt = this.$stel.c2s(vObs)
+
+      return {
+        ra: radec[0] * 180 / Math.PI,
+        dec: radec[1] * 180 / Math.PI,
+        az: this.$stel.anp(azalt[0]) * 180 / Math.PI,
+        alt: azalt[1] * 180 / Math.PI
+      }
+    },
+    // 获取所有马赛克 tile 的中心坐标
+    getMosaicTileCenters () {
+      return this.mosaicTiles.map(tile => ({
+        index: tile.index,
+        ra: tile.ra,
+        dec: tile.dec,
+        az: tile.az,
+        alt: tile.alt,
+        pa: tile.pa
+      }))
     },
     updateState () {
       const data =
@@ -439,7 +628,9 @@ export default {
           enableArMode: this.$store.state.appEnableARMode,
           currentLocation: this.getCenterRaDecValue(),
           direction: ((this.$stel.core.observer.yaw * 180 / Math.PI) % 360 + 360) % 360,
-          drawSelectedTargetLine: this.linesObj != null
+          drawSelectedTargetLine: this.linesObj != null,
+          showMosaic: this.showMosaic,
+          mosaicConfig: this.mosaicConfig
         }
       this.updateFovBox()
       jsbridge.postMessage('getState', data)
@@ -645,6 +836,38 @@ export default {
         clearOffCenterRect: () => {
           this.showOffCenterRect = false
           this.offCenterRectParams = null
+        },
+        // 显示马赛克网格
+        // 参数: { x: 横向个数, y: 纵向个数, overlap: 重叠百分比 }
+        showMosaic: (config) => {
+          if (!config || typeof config !== 'object') {
+            this.showMosaic = false
+            return
+          }
+
+          const x = Number(config.x) || 1
+          const y = Number(config.y) || 1
+          const overlap = Number(config.overlap) || 0
+
+          // 验证参数
+          if (x <= 0 || y <= 0 || overlap < 0 || overlap >= 100) {
+            console.warn('showMosaic: Invalid config', config)
+            return
+          }
+
+          this.mosaicConfig = { x, y, overlap }
+          this.showMosaic = true
+          this.updateMosaic()
+        },
+        // 隐藏马赛克网格
+        hideMosaic: () => {
+          this.showMosaic = false
+          this.mosaicTiles = []
+        },
+        // 获取马赛克 tile 中心坐标
+        getMosaicCenters: () => {
+          const centers = this.getMosaicTileCenters()
+          jsbridge.postMessage('mosaicCenters', centers)
         },
         // 仅用于配置星图的 armode,和 app 本身的 armode 没关系
         updateArMode: (v) => {
@@ -1000,3 +1223,17 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.mosaic-tile {
+  pointer-events: none;
+}
+
+.mosaic-label {
+  color: rgba(244, 129, 35, 0.9);
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: 0 0 3px black, 0 0 6px black;
+  user-select: none;
+}
+</style>
