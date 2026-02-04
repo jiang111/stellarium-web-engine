@@ -72,7 +72,9 @@ export default {
         y: 1, // 纵向个数
         overlap: 10 // 重叠百分比
       },
-      mosaicTiles: [] // 存储每个 tile 的样式和信息
+      mosaicTiles: [], // 存储每个 tile 的样式和信息
+      // 标记是否通过 jsbridge 设置过时间
+      hasSetDateTime: false
     }
   },
   mounted () {
@@ -956,6 +958,7 @@ export default {
             const m = Moment(isoString)
             m.local()
             this.$stel.core.observer.utc = m.toDate().getMJD()
+            this.hasSetDateTime = true
             this.updateState()
           },
         speedTime:
@@ -1009,8 +1012,8 @@ export default {
           // 1. 转换坐标并生成虚线段 (Manual Dashing)
           const features = []
           const toRad = Math.PI / 180
-          const dashSizeDeg = 0.2 // 虚线实线部分长度 (度)
-          const gapSizeDeg = 0.2 // 虚线间隔部分长度 (度)
+          const dashSizeDeg = 0.1 // 虚线实线部分长度 (度)
+          const gapSizeDeg = 0.3 // 虚线间隔部分长度 (度)
           const dashRad = dashSizeDeg * toRad
           const gapRad = gapSizeDeg * toRad
 
@@ -1040,25 +1043,97 @@ export default {
             return [radec[0] * 180 / Math.PI, radec[1] * 180 / Math.PI]
           }
 
-          for (let i = 0; i < pointsList.length - 1; i++) {
-            const pt1 = pointsList[i]
-            const pt2 = pointsList[i + 1]
+          // 2. 将所有点转换为 ICRF 向量
+          const rawIcrfPoints = pointsList.map(pt => getVecIcrf(pt))
 
-            const v1 = getVecIcrf(pt1)
-            const v2 = getVecIcrf(pt2)
+          // 3. 检测首尾点是否接近重合（闭合圆），如果接近则将最后一个点调整为第一个点的位置
+          if (rawIcrfPoints.length >= 2) {
+            const vFirst = rawIcrfPoints[0]
+            const vLast = rawIcrfPoints[rawIcrfPoints.length - 1]
+            const dotFirstLast = vFirst[0] * vLast[0] + vFirst[1] * vLast[1] + vFirst[2] * vLast[2]
+            const angleBetween = Math.acos(Math.min(1, Math.max(-1, dotFirstLast)))
+            // 如果首尾点角度差小于5度，认为是闭合圆，将最后一个点调整为第一个点的位置
+            if (angleBetween < 5 * toRad) {
+              rawIcrfPoints[rawIcrfPoints.length - 1] = [...vFirst]
+            }
+          }
+
+          // 4. 对原始点列表进行插值细分，使圆形更加圆滑
+          const interpolationStepDeg = 0.5 // 每0.5度插值一个点
+          const interpolationStepRad = interpolationStepDeg * toRad
+          const icrfPoints = []
+
+          for (let i = 0; i < rawIcrfPoints.length - 1; i++) {
+            const v1 = rawIcrfPoints[i]
+            const v2 = rawIcrfPoints[i + 1]
 
             const dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
-            const totalAngle = Math.acos(Math.min(1, Math.max(-1, dot)))
+            const segAngle = Math.acos(Math.min(1, Math.max(-1, dot)))
 
-            let currentAngle = 0
-            while (currentAngle < totalAngle) {
-              const startT = currentAngle / totalAngle
-              const endT = Math.min((currentAngle + dashRad) / totalAngle, 1)
+            // 跳过首尾重合的零长度线段
+            if (segAngle < 1e-9) {
+              continue
+            }
 
-              const pStart = slerp(v1, v2, startT)
-              const pEnd = slerp(v1, v2, endT)
+            // 计算需要插值的点数
+            const numSteps = Math.max(1, Math.ceil(segAngle / interpolationStepRad))
 
-              // Create a LineString feature for each dash
+            for (let j = 0; j < numSteps; j++) {
+              const t = j / numSteps
+              icrfPoints.push(slerp(v1, v2, t))
+            }
+          }
+          // 添加最后一个点
+          if (rawIcrfPoints.length > 0) {
+            icrfPoints.push(rawIcrfPoints[rawIcrfPoints.length - 1])
+          }
+
+          // 5. 计算每段的角度和累积角度
+          const segmentAngles = []
+          let totalAngle = 0
+          for (let i = 0; i < icrfPoints.length - 1; i++) {
+            const v1 = icrfPoints[i]
+            const v2 = icrfPoints[i + 1]
+            const dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
+            const angle = Math.acos(Math.min(1, Math.max(-1, dot)))
+            segmentAngles.push({ start: totalAngle, angle: angle, v1: v1, v2: v2 })
+            totalAngle += angle
+          }
+
+          // 6. 沿整个圆周连续生成虚线
+          const getPointAtAngle = (targetAngle) => {
+            // 找到目标角度所在的线段
+            for (let i = 0; i < segmentAngles.length; i++) {
+              const seg = segmentAngles[i]
+              if (targetAngle >= seg.start && targetAngle <= seg.start + seg.angle) {
+                // 在这个线段内插值
+                const localT = seg.angle > 1e-9 ? (targetAngle - seg.start) / seg.angle : 0
+                return slerp(seg.v1, seg.v2, localT)
+              }
+            }
+            // 如果超出范围，返回最后一个点
+            return icrfPoints[icrfPoints.length - 1]
+          }
+
+          let currentAngle = 0
+          while (currentAngle < totalAngle) {
+            const dashEndAngle = Math.min(currentAngle + dashRad, totalAngle)
+
+            // 在虚线段内细分多个点，确保弧线平滑
+            const dashLength = dashEndAngle - currentAngle
+            const numSubPoints = Math.max(2, Math.ceil(dashLength / (0.01 * toRad))) // 每0.01度一个点
+            const dashCoords = []
+
+            for (let j = 0; j <= numSubPoints; j++) {
+              const t = j / numSubPoints
+              const angle = currentAngle + t * dashLength
+              if (angle <= totalAngle) {
+                const v = getPointAtAngle(angle)
+                dashCoords.push(vecToRaDecDeg(v))
+              }
+            }
+
+            if (dashCoords.length >= 2) {
               features.push({
                 type: 'Feature',
                 properties: {
@@ -1067,12 +1142,12 @@ export default {
                 },
                 geometry: {
                   type: 'LineString',
-                  coordinates: [vecToRaDecDeg(pStart), vecToRaDecDeg(pEnd)]
+                  coordinates: dashCoords
                 }
               })
-
-              currentAngle += dashRad + gapRad
             }
+
+            currentAngle += dashRad + gapRad
           }
 
           const geojsonData = {
@@ -1115,6 +1190,13 @@ export default {
       }
     },
     getLocalTime: function () {
+      // 只有通过 jsbridge 调用 setDateTime 设置过时间才返回时间值
+      if (!this.hasSetDateTime) {
+        return null
+      }
+      if (this.$store.state.stel.observer.utc == null) {
+        return null
+      }
       var d = new Date()
       d.setMJD(this.$store.state.stel.observer.utc)
       const m = Moment(d)
