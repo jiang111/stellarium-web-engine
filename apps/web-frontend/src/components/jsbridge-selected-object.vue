@@ -78,6 +78,10 @@ export default {
       if (!newObject) return
       const that = this
       const obj = this.$stel.core.selection
+
+      console.log('obj ssssss', obj.getInfo('horizons_id'))
+      console.log('obj ssssss', obj?.jsonData?.model_data?.horizons_id)
+
       const result = {
         title: swh.namesForSkySource(this.selectedObject, 26),
         name: newObject.names || [],
@@ -85,7 +89,7 @@ export default {
         model: newObject.model || '',
         types: newObject.types || [],
         model_data: newObject.model_data || {},
-        horizons_id: newObject.model_data?.horizons_id || null
+        horizons_id: obj?.jsonData?.model_data?.horizons_id || null
       }
       const formatRA = function (a) {
         const raf = that.$stel.a2tf(a, 1)

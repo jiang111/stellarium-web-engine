@@ -770,7 +770,7 @@ export default {
           let newFov = maxDistance * 1.5
 
           if (newFov < 10) newFov = 10
-          if (newFov > 180) newFov = 180
+          if (newFov > 80) newFov = 80
 
           const currentFov = this.$store.state.stel.fov * 180 / Math.PI
           console.log('scaleFov2Target: angleDeg:', angleDeg, 'targetHalfSize:', targetHalfSize, 'newFov:', newFov, 'currentFov:', currentFov)
