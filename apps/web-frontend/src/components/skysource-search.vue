@@ -64,21 +64,9 @@ export default {
       this.searchText = ''
     },
     refresh: _.debounce(function () {
-      var that = this
-      let str = that.searchText
-      str = str.toUpperCase()
-      str = str.replace(/\s+/g, '')
-      if (this.lastQuery === str) {
-        return
-      }
-      this.lastQuery = str
-      swh.querySkySources(str, 10).then(results => {
-        if (str !== that.lastQuery) {
-          console.log('Cancelled query: ' + str)
-          return
-        }
-        that.autoCompleteChoices = results
-      }, err => { console.log(err) })
+      // 在线搜索功能已禁用
+      console.log('Online sky source search is disabled')
+      this.autoCompleteChoices = []
     }, 200),
     nameForSkySource: function (s) {
       const cn = swh.cleanupOneSkySourceName(s.match)

@@ -60,12 +60,13 @@ export default {
         this.$store.commit('setSelectedObject', 0)
         return
       }
-      swh.sweObj2SkySource(this.$stel.core.selection).then(res => {
+      try {
+        const res = swh.sweObj2SkySource(this.$stel.core.selection)
         this.$store.commit('setSelectedObject', res)
-      }, err => {
+      } catch (err) {
         console.log("Couldn't find info for object " + s + ':' + err)
         this.$store.commit('setSelectedObject', 0)
-      })
+      }
     },
     showShareLinkDialog: function (b) {
       this.shareLink = swh.getShareLink(this)
@@ -78,9 +79,6 @@ export default {
       if (!newObject) return
       const that = this
       const obj = this.$stel.core.selection
-
-      console.log('obj ssssss', obj.getInfo('horizons_id'))
-      console.log('obj ssssss', obj?.jsonData?.model_data?.horizons_id)
 
       const result = {
         title: swh.namesForSkySource(this.selectedObject, 26),

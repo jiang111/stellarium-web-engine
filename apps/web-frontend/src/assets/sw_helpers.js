@@ -281,36 +281,8 @@ const swh = {
     return obj
   },
 
-  lookupSkySourceByName: function (name) {
-    return fetch(process.env.VUE_APP_NOCTUASKY_API_SERVER + '/api/v1/skysources/name/' + name)
-      .then(function (response) {
-        if (!response.ok) {
-          throw response.body
-        }
-        return response.json()
-      }, err => {
-        throw err.response.body
-      })
-  },
-
-  querySkySources: function (str, limit) {
-    if (!limit) {
-      limit = 10
-    }
-    return fetch(process.env.VUE_APP_NOCTUASKY_API_SERVER + '/api/v1/skysources/?q=' + str + '&limit=' + limit)
-      .then(function (response) {
-        if (!response.ok) {
-          throw response.body
-        }
-        return response.json()
-      }, err => {
-        throw err.response.body
-      })
-  },
-
   sweObj2SkySource: function (obj) {
     const names = obj.designations()
-    const that = this
 
     if (!names || !names.length) {
       throw new Error("Can't find object without names")
@@ -326,42 +298,19 @@ const swh = {
       }
     }
 
-    const printErr = function (n) {
-      console.log("Couldn't find online skysource data for name: " + n)
-
-      const ss = obj.jsonData
-      if (!ss.model_data) {
-        ss.model_data = {}
-      }
-      // Names fixup
-      let i
-      for (i in ss.names) {
-        if (ss.names[i].startsWith('GAIA')) {
-          ss.names[i] = ss.names[i].replace(/^GAIA /, 'Gaia DR2 ')
-        }
-      }
-      ss.culturalNames = obj.culturalDesignations()
-      return ss
+    const ss = obj.jsonData
+    if (!ss.model_data) {
+      ss.model_data = {}
     }
-
-    return that.lookupSkySourceByName(names[0]).then(res => {
-      return res
-    }, () => {
-      if (names.length === 1) return printErr(names)
-      return that.lookupSkySourceByName(names[1]).then(res => {
-        return res
-      }, () => {
-        if (names.length === 2) return printErr(names)
-        return that.lookupSkySourceByName(names[2]).then(res => {
-          return res
-        }, () => {
-          return printErr(names[2])
-        })
-      })
-    }).then(res => {
-      res.culturalNames = obj.culturalDesignations()
-      return res
-    })
+    // Names fixup
+    let i
+    for (i in ss.names) {
+      if (ss.names[i].startsWith('GAIA')) {
+        ss.names[i] = ss.names[i].replace(/^GAIA /, 'Gaia DR2 ')
+      }
+    }
+    ss.culturalNames = obj.culturalDesignations()
+    return ss
   },
 
   setSweObjAsSelection: function (obj, lock = true) {

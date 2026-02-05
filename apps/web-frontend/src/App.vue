@@ -148,23 +148,13 @@ export default {
       if (this.$route.path.startsWith('/skysource/')) {
         const name = decodeURIComponent(this.$route.path.substring(11))
         console.log('Will select object: ' + name)
-        return swh.lookupSkySourceByName(name).then(ss => {
-          if (!ss) {
-            return
-          }
-          let obj = swh.skySource2SweObj(ss)
-          if (!obj) {
-            obj = this.$stel.createObj(ss.model, ss)
-            this.$selectionLayer.add(obj)
-          }
-          if (!obj) {
-            console.warning("Can't find object in SWE: " + ss.names[0])
-          }
+        // 直接从本地引擎查找对象
+        const obj = this.$stel.getObj(name)
+        if (obj) {
           swh.setSweObjAsSelection(obj)
-        }, err => {
-          console.log(err)
+        } else {
           console.log("Couldn't find skysource for name: " + name)
-        })
+        }
       }
     }
   },
