@@ -886,10 +886,15 @@ export default {
               // 当高度变化超过 2 度时，认为用户在上下晃动手机，重新开启 AR 模式
               if (diff > 2) {
                 this.$store.commit('setARMode', true)
+                // 开启 AR 模式后立即执行移动，不再 return
+              } else {
+                this.lastAlt = currentAlt
+                return
               }
+            } else {
+              this.lastAlt = currentAlt
+              return
             }
-            this.lastAlt = currentAlt
-            return
           }
           this.lastAlt = currentAlt
           this.$stel.core.observer.yaw = -1 * ss.az * 0.017453292519943295
@@ -939,7 +944,11 @@ export default {
         },
         unselect: () => {
           this.$stel.core.selection = null
-          this.lastAlt = undefined
+          // 直接设置 lock = null 不起作用，尝试调用底层 C 函数
+          // 通过 Module._core_point_and_lock(0, 0) 传入 null 指针来解锁
+          if (this.$stel._core_point_and_lock) {
+            this.$stel._core_point_and_lock(0, 0)
+          }
         },
         // updateFov 支持两种调用方式：
         // 1. updateFov(fovDeg) - 传入单个 fovY 度数
