@@ -455,6 +455,15 @@ Module['on'] = function(eventName, callback) {
  *   A promise that can be used to be notified once the font has been loaded.
  */
 Module['setFont'] = function(font, url) {
+  // Helper function to add the internal fallback font.
+  function addFallbackFont(fontName) {
+    const fallbackUrl = (fontName === 'regular') ? 'asset://font/NotoSans-Regular.ttf' :
+                                                   'asset://font/NotoSans-Bold.ttf';
+    Module.ccall('core_add_font', null,
+                 ['number', 'string', 'string', 'number', 'number', 'number'],
+                 [0, fontName, fallbackUrl, 0, 0]);
+  }
+
   return fetch(url).then(function(response) {
     if (!response.ok) throw new Error(`Cannot get ${url}`);
     return response.arrayBuffer();
@@ -465,12 +474,16 @@ Module['setFont'] = function(font, url) {
     Module.ccall('core_add_font', null,
                  ['number', 'string', 'string', 'number', 'number', 'number'],
                  [0, font, null, ptr, data.length]);
+    console.log(`Font loaded successfully: ${font} from ${url}`);
 
     // Also add the internal fallback font.
-    let url = (font === 'regular') ? 'asset://font/NotoSans-Regular.ttf' :
-                                     'asset://font/NotoSans-Bold.ttf';
-    Module.ccall('core_add_font', null,
-                 ['number', 'string', 'string', 'number', 'number', 'number'],
-                 [0, font, url, 0, 0]);
+    addFallbackFont(font);
+  }).catch(function(err) {
+    console.error(`Failed to load font ${font} from ${url}:`, err);
+    // Still add the fallback font so at least basic text can be displayed.
+    console.log(`Adding fallback font for ${font}`);
+    addFallbackFont(font);
+    // Re-throw the error so the caller can handle it if needed.
+    throw err;
   });
 }
