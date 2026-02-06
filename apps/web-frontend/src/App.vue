@@ -216,8 +216,10 @@ export default {
           //   that.$store.commit('setAutoDetectedLocation', loc)
           // }, (error) => { console.log(error) })
 
-          that.$stel.setFont('regular', process.env.BASE_URL + 'fonts/AlibabaPuHuiTi-3-55-Regular.ttf', 1.38)
-          that.$stel.setFont('bold', process.env.BASE_URL + 'fonts/AlibabaPuHuiTi-3-85-Bold.ttf', 1.38)
+          // that.$stel.setFont('regular', process.env.BASE_URL + 'fonts/SourceHanSansSC-Regular.ttf', 1.38)
+          //   .catch(err => console.warn('Failed to load regular font:', err))
+          // that.$stel.setFont('bold', process.env.BASE_URL + 'fonts/AlibabaPuHuiTi-3-85-Bold.ttf', 1.38)
+          //   .catch(err => console.warn('Failed to load bold font:', err))
 
           /// 只有当挪动到指定区域的时候，才显示这个区域的图像
           that.$stel.core.constellations.show_only_pointed = true

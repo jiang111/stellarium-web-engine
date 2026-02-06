@@ -144,7 +144,8 @@ flags = [
          '-s', 'NO_EXIT_RUNTIME=1',
          '-s', '"EXPORTED_FUNCTIONS=[]"',
          '-s', '"EXTRA_EXPORTED_RUNTIME_METHODS=[%s]"' % extra_exported,
-         '-s', 'FILESYSTEM=0'
+         '-s', 'FILESYSTEM=0',
+         '-s', 'INITIAL_MEMORY=33554432',  # 32MB initial memory
         ]
 
 #if env['mode'] not in ['profile', 'debug']:
