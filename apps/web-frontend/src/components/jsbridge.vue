@@ -439,7 +439,7 @@ export default {
         return
       }
 
-      const { x, y, overlap } = this.mosaicConfig
+      const { x, y, overlap, rotation: mosaicRotation } = this.mosaicConfig
       if (x <= 0 || y <= 0) {
         this.mosaicTiles = []
         return
@@ -465,10 +465,13 @@ export default {
       const tileWidthPx = clientHeight * Math.tan(targetFovXRad / 4) / Math.tan(currentFovYRad / 4)
       const tileHeightPx = clientHeight * Math.tan(targetFovYRad / 4) / Math.tan(currentFovYRad / 4)
 
-      // 计算有效步进（考虑重叠）
+      // 计算有效步进（考虑重叠）- 角度空间
       const overlapFactor = 1 - overlap / 100
-      const stepX = tileWidthPx * overlapFactor
-      const stepY = tileHeightPx * overlapFactor
+      const stepXAngle = (this.targetFovX || 10) * overlapFactor // 角度步进
+      const stepYAngle = (this.targetFovY || 5) * overlapFactor
+      // 屏幕步进
+      const stepXPx = tileWidthPx * overlapFactor
+      const stepYPx = tileHeightPx * overlapFactor
 
       // 生成 tiles
       const tiles = []
@@ -479,29 +482,33 @@ export default {
 
       for (let row = 0; row < y; row++) {
         for (let col = 0; col < x; col++) {
-          // 计算相对于中心的偏移（未旋转）
-          const offsetX = (col - (x - 1) / 2) * stepX
-          const offsetY = (row - (y - 1) / 2) * stepY
+          // 计算相对于中心的屏幕偏移（未旋转）
+          const offsetXPx = (col - (x - 1) / 2) * stepXPx
+          const offsetYPx = (row - (y - 1) / 2) * stepYPx
 
-          // 应用中心旋转变换来获得屏幕位置
+          // 应用中心旋转变换来获得屏幕位置（用于绘制）
           const rotRad = centerRotation * Math.PI / 180
-          const rotatedOffsetX = offsetX * Math.cos(rotRad) - offsetY * Math.sin(rotRad)
-          const rotatedOffsetY = offsetX * Math.sin(rotRad) + offsetY * Math.cos(rotRad)
+          const rotatedOffsetX = offsetXPx * Math.cos(rotRad) - offsetYPx * Math.sin(rotRad)
+          const rotatedOffsetY = offsetXPx * Math.sin(rotRad) + offsetYPx * Math.cos(rotRad)
 
           // 屏幕坐标（相对于画布中心）
           const screenX = clientWidth / 2 + rotatedOffsetX
           const screenY = clientHeight / 2 + rotatedOffsetY
 
           // 计算该 tile 中心的 RA/Dec 和 Alt/Az
-          const tileCenter = this.screenToRaDec(screenX, screenY)
+          // 使用角度偏移直接在 VIEW frame 中计算，而不是用旋转后的屏幕坐标逆投影
+          const offsetXAngle = (col - (x - 1) / 2) * stepXAngle * Math.PI / 180
+          const offsetYAngle = (row - (y - 1) / 2) * stepYAngle * Math.PI / 180
+          const tileCenter = this.calculateTileCenter(offsetXAngle, offsetYAngle)
 
           // 计算该 tile 位置的独立 PA
           let tileRotation = centerRotation
           if (tileCenter && tileCenter.az !== undefined && tileCenter.alt !== undefined) {
             tileRotation = this.calculateFovRotationAt(tileCenter.az, tileCenter.alt)
-            // 如果有手动设置的旋转角度，应用它
-            if (this.manualCenterRotation !== null && this.manualCenterRotation !== undefined) {
-              tileRotation = tileRotation - this.manualCenterRotation
+            // 如果有手动设置的旋转角度，应用它（优先使用 mosaic 自己的 rotation，否则使用 centerFov 的）
+            const effectiveRotation = (mosaicRotation !== null && mosaicRotation !== undefined) ? mosaicRotation : this.manualCenterRotation
+            if (effectiveRotation !== null && effectiveRotation !== undefined) {
+              tileRotation = tileRotation - effectiveRotation
             }
           }
 
@@ -536,6 +543,49 @@ export default {
       }
 
       this.mosaicTiles = tiles
+    },
+    // 根据角度偏移计算 tile 中心的 RA/Dec 和 Alt/Az
+    // offsetXAngle, offsetYAngle: 相对于屏幕中心的角度偏移（弧度）
+    // 这个方法直接在 VIEW frame 中计算，避免屏幕坐标旋转后再逆投影导致的误差
+    calculateTileCenter (offsetXAngle, offsetYAngle) {
+      if (!this.$stel || !this.$stel.core) return null
+
+      const obs = this.$stel.core.observer
+
+      // 1. 获取屏幕中心的 VIEW 方向
+      const vCenterView = [0, 0, -1]
+
+      // 2. 获取屏幕中心的 ICRF 坐标
+      const vCenterIcrf = this.$stel.convertFrame(obs, 'VIEW', 'ICRF', vCenterView)
+      const centerRaDec = this.$stel.c2s(vCenterIcrf)
+      const centerRa = centerRaDec[0]
+      const centerDec = centerRaDec[1]
+
+      // 3. 计算 tile 在赤道坐标系中的偏移
+      // 屏幕 X 正向（向右）对应天球西方，RA 减小
+      // 屏幕 Y 正向（向下）对应 Dec 减小
+      // 注意：RA 偏移需要除以 cos(dec) 来修正
+      const cosDec = Math.cos(centerDec)
+      const raOffset = cosDec > 0.01 ? -offsetXAngle / cosDec : -offsetXAngle
+      const decOffset = -offsetYAngle
+
+      // 4. 计算新的 RA/Dec
+      const tileRa = centerRa + raOffset
+      const tileDec = centerDec + decOffset
+
+      // 5. 转换回 ICRF 笛卡尔坐标
+      const vTileIcrf = this.$stel.s2c(tileRa, tileDec)
+
+      // 6. 转换到 OBSERVED frame 获取 Alt/Az
+      const vTileObs = this.$stel.convertFrame(obs, 'ICRF', 'OBSERVED', vTileIcrf)
+      const azalt = this.$stel.c2s(vTileObs)
+
+      return {
+        ra: tileRa * 180 / Math.PI / 15, // 转换为小时（1h = 15°）
+        dec: tileDec * 180 / Math.PI,
+        az: this.$stel.anp(azalt[0]) * 180 / Math.PI,
+        alt: azalt[1] * 180 / Math.PI
+      }
     },
     // 将屏幕坐标转换为 RA/Dec 和 Alt/Az
     screenToRaDec (screenX, screenY) {
@@ -857,7 +907,9 @@ export default {
             return
           }
 
-          this.mosaicConfig = { x, y, overlap }
+          // 支持 rotation 和 angle 两种字段名，与 toggleCenterFov 保持一致
+          const rotation = config.rotation !== undefined ? Number(config.rotation) : (config.angle !== undefined ? Number(config.angle) : null)
+          this.mosaicConfig = { x, y, overlap, rotation }
           this.showMosaic = true
           this.updateMosaic()
         },
