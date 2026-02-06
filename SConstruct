@@ -138,7 +138,7 @@ flags = [
          '--pre-js', 'src/js/geojson.js',
          '--pre-js', 'src/js/canvas.js',
          # '-s', 'STRICT=1', # Note: to put back once we switch to emsdk 2
-         '-s', 'RESERVED_FUNCTION_POINTERS=10',
+         # RESERVED_FUNCTION_POINTERS is deprecated, ALLOW_TABLE_GROWTH=1 is used instead
          '-O3',
          '-s', 'USE_WEBGL2=1',
          '-s', 'NO_EXIT_RUNTIME=1',
