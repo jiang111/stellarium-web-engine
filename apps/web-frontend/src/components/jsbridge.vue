@@ -46,7 +46,8 @@ export default {
         height: '0px',
         background: 'rgba(244, 129, 35, 0.1)',
         border: '1px solid rgba(244, 129, 35, 0.7)',
-        transform: 'rotate(0deg)'
+        transform: 'rotate(0deg)',
+        pointerEvents: 'none'
       },
       manualCenterRotation: null,
       isCenterCircle: false,
@@ -62,7 +63,8 @@ export default {
         border: '1px solid rgba(60, 131, 255, 0.7)',
         transform: 'translate(-50%, -50%) rotate(0deg)',
         left: '50%',
-        top: '50%'
+        top: '50%',
+        pointerEvents: 'none'
       },
       offCenterRectParams: null,
       // 马赛克网格数据
@@ -229,7 +231,8 @@ export default {
         background: 'rgba(244, 129, 35, 0.1)',
         border: '1px solid rgba(244, 129, 35, 0.7)',
         borderRadius: this.isCenterCircle ? '50%' : '0',
-        transform: `rotate(${angleDeg}deg)`
+        transform: `rotate(${angleDeg}deg)`,
+        pointerEvents: 'none'
       }
     },
     // Calculate the rotation angle to align FOV box's long edge towards celestial north pole
@@ -368,7 +371,8 @@ export default {
         transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
         left: screenX + 'px',
         top: screenY + 'px',
-        display: 'block'
+        display: 'block',
+        pointerEvents: 'none'
       }
     },
     // Calculate FOV rotation at a specific Alt/Az position
