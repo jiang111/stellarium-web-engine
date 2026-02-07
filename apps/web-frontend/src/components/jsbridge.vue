@@ -602,7 +602,8 @@ export default {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              pointerEvents: 'none'
             }
           })
           index++
@@ -1472,6 +1473,7 @@ export default {
 </script>
 
 <style scoped>
+
 .mosaic-tile {
   pointer-events: none;
 }
@@ -1482,5 +1484,6 @@ export default {
   font-weight: bold;
   text-shadow: 0 0 3px black, 0 0 6px black;
   user-select: none;
+  pointer-events: none;
 }
 </style>
