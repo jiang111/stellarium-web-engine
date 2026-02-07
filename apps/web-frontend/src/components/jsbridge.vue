@@ -516,6 +516,11 @@ export default {
       // 获取中心 FOV 框的旋转角度（作为参考）
       const centerRotation = this.calculateFovRotation()
 
+      let minScreenX = Infinity
+      let maxScreenX = -Infinity
+      let minScreenY = Infinity
+      let maxScreenY = -Infinity
+
       for (let row = 0; row < y; row++) {
         for (let col = 0; col < x; col++) {
           // 计算相对于中心的屏幕偏移（未旋转）
@@ -548,6 +553,32 @@ export default {
             }
           }
 
+          // 计算 bounding box
+          const w = tileWidthPx / 2
+          const h = tileHeightPx / 2
+          const rad = tileRotation * Math.PI / 180
+          const cos = Math.cos(rad)
+          const sin = Math.sin(rad)
+
+          const corners = [
+            { x: w, y: -h },
+            { x: -w, y: -h },
+            { x: -w, y: h },
+            { x: w, y: h }
+          ]
+
+          corners.forEach(p => {
+            const rx = p.x * cos - p.y * sin
+            const ry = p.x * sin + p.y * cos
+            const cx = screenX + rx
+            const cy = screenY + ry
+
+            if (cx < minScreenX) minScreenX = cx
+            if (cx > maxScreenX) maxScreenX = cx
+            if (cy < minScreenY) minScreenY = cy
+            if (cy > maxScreenY) maxScreenY = cy
+          })
+
           tiles.push({
             index,
             col,
@@ -579,6 +610,33 @@ export default {
       }
 
       this.mosaicTiles = tiles
+
+      // 自动调整 FOV 逻辑
+      // 计算 bounding box 的宽和高
+      const mosaicWidth = maxScreenX - minScreenX
+      const mosaicHeight = maxScreenY - minScreenY
+
+      // 如果马赛克超出屏幕，计算需要的缩放比例
+      if (mosaicWidth > clientWidth || mosaicHeight > clientHeight) {
+        // 计算需要的缩放系数（增加一点 padding，例如 1.05）
+        const scaleX = mosaicWidth / clientWidth
+        const scaleY = mosaicHeight / clientHeight
+        const requiredScale = Math.max(scaleX, scaleY) * 1.05
+
+        if (requiredScale > 1.01) { // 设置一个小阈值防止抖动
+          // 根据缩放系数计算新的 FOV
+          // 公式: tan(newFov/4) = tan(currentFov/4) * requiredScale
+          const newTan = Math.tan(currentFovYRad / 4) * requiredScale
+          const newFovRad = 4 * Math.atan(newTan)
+          const newFovDeg = newFovRad * 180 / Math.PI
+
+          // 限制最大 FOV
+          if (newFovDeg <= 180) {
+            console.log('Auto-adjusting FOV to fit mosaic:', newFovDeg)
+            this.$stel.zoomTo(newFovRad, 0.5)
+          }
+        }
+      }
     },
     // 根据角度偏移计算 tile 中心的 RA/Dec 和 Alt/Az
     // offsetXAngle, offsetYAngle: 相对于屏幕中心的角度偏移（弧度）
