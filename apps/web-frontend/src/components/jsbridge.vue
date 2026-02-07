@@ -455,7 +455,7 @@ export default {
           this.updateOffCenterRect()
         }
         if (this.showMosaic) {
-          this.updateMosaic()
+          this.updateMosaic(false)
         }
         this.fovAnimationId = requestAnimationFrame(animate)
       }
@@ -469,7 +469,7 @@ export default {
       }
     },
     // 更新马赛克网格
-    updateMosaic () {
+    updateMosaic (needUpdateFov = false) {
       if (!this.showMosaic || !this.$stel || !this.$stel.canvas) {
         this.mosaicTiles = []
         return
@@ -611,6 +611,7 @@ export default {
 
       this.mosaicTiles = tiles
 
+      if (needUpdateFov === false) return
       // 自动调整 FOV 逻辑
       // 计算 bounding box 的宽和高
       const mosaicWidth = maxScreenX - minScreenX
@@ -1018,7 +1019,7 @@ export default {
           const rotation = config.rotation !== undefined ? Number(config.rotation) : (config.angle !== undefined ? Number(config.angle) : null)
           this.mosaicConfig = { x, y, overlap, rotation }
           this.showMosaic = true
-          this.updateMosaic()
+          this.updateMosaic(true)
         },
         // 隐藏马赛克网格
         hideMosaic: () => {
