@@ -1,8 +1,12 @@
 <template>
   <div class="jsbridge-overlay"
        style="overflow: hidden; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
-    <div v-if="showCenterFov && !showMosaic" :style="fovBoxStyle"></div>
-    <div v-if="showOffCenterRect" :style="offCenterRectStyle"></div>
+    <div v-if="showCenterFov && !showMosaic" :style="fovBoxStyle">
+      <div v-if="centerFovLabel" :style="centerFovLabelStyle">{{ centerFovLabel }}</div>
+    </div>
+    <div v-if="showOffCenterRect" :style="offCenterRectStyle">
+      <div v-if="offCenterRectLabel" :style="offCenterRectLabelStyle">{{ offCenterRectLabel }}</div>
+    </div>
     <!-- Mosaic Grid -->
     <div v-for="tile in mosaicTiles" :key="tile.index" :style="tile.style" class="mosaic-tile">
       <span class="mosaic-label">{{ tile.index }}</span>
@@ -51,6 +55,18 @@ export default {
       },
       manualCenterRotation: null,
       isCenterCircle: false,
+      centerFovLabel: '',
+      centerFovLabelStyle: {
+        position: 'absolute',
+        top: '100%',
+        left: '0',
+        width: '100%',
+        textAlign: 'center',
+        color: 'rgba(244, 129, 35, 0.9)',
+        fontSize: '13px',
+        marginTop: '4px',
+        pointerEvents: 'none'
+      },
       fovAnimationId: null,
       lastRectParams: null,
       savedFovBeforeScale: null,
@@ -67,6 +83,18 @@ export default {
         pointerEvents: 'none'
       },
       offCenterRectParams: null,
+      offCenterRectLabel: '',
+      offCenterRectLabelStyle: {
+        position: 'absolute',
+        top: '100%',
+        left: '0',
+        width: '100%',
+        textAlign: 'center',
+        color: 'rgba(60, 131, 255, 0.9)',
+        fontSize: '13px',
+        marginTop: '4px',
+        pointerEvents: 'none'
+      },
       // 马赛克网格数据
       showMosaic: false,
       mosaicConfig: {
@@ -784,6 +812,11 @@ export default {
             } else {
               this.manualCenterRotation = null
             }
+            if (data.label !== undefined) {
+              this.centerFovLabel = data.label
+            } else {
+              this.centerFovLabel = ''
+            }
           }
 
           if (this.showCenterFov) {
@@ -885,6 +918,13 @@ export default {
           this.lastRectParams = { alt, az, fovX, fovY, rotation }
           // Store params for animation loop update
           this.offCenterRectParams = { alt, az, fovX, fovY, rotation, isCircle }
+
+          if (ss.label !== undefined) {
+            this.offCenterRectLabel = ss.label
+          } else {
+            this.offCenterRectLabel = ''
+          }
+
           this.showOffCenterRect = true
           this.updateOffCenterRect()
         },
@@ -892,6 +932,7 @@ export default {
         clearOffCenterRect: () => {
           this.showOffCenterRect = false
           this.offCenterRectParams = null
+          this.offCenterRectLabel = ''
         },
         // 显示马赛克网格
         // 参数: { x: 横向个数, y: 纵向个数, overlap: 重叠百分比 }
