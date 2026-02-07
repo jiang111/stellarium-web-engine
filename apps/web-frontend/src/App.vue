@@ -336,7 +336,7 @@ html, body, #app {
   padding: 0!important;
   font-size: 14px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Noto Sans', sans-serif;
-
+  touch-action: none;
 }
 
 .fullscreen {
@@ -364,7 +364,7 @@ html, body, #app {
 }
 
 #stel {height: 100%; width: 100%; position: absolute;}
-#stel-canvas {z-index: -10; width: 100%; height: 100%;}
+#stel-canvas {z-index: -10; width: 100%; height: 100%; touch-action: none;}
 
 .right_panel {
   padding-right: 400px;
