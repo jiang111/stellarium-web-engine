@@ -254,9 +254,14 @@ export default {
               isMoving = true
               startX = e.touches[0].clientX
               startY = e.touches[0].clientY
+            } else {
+              isMoving = false
             }
           }, { passive: true })
           window.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 1) {
+              isMoving = false
+            }
             if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY)
           }, { passive: true })
           window.addEventListener('touchend', () => { isMoving = false })
