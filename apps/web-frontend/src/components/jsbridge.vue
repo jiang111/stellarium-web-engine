@@ -59,8 +59,9 @@ export default {
       centerFovLabelStyle: {
         position: 'absolute',
         top: '100%',
-        left: '0',
-        width: '100%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        whiteSpace: 'nowrap',
         textAlign: 'center',
         color: 'rgba(244, 129, 35, 0.9)',
         fontSize: '13px',
@@ -80,6 +81,7 @@ export default {
         transform: 'translate(-50%, -50%) rotate(0deg)',
         left: '50%',
         top: '50%',
+        overflow: 'visible',
         pointerEvents: 'none'
       },
       offCenterRectParams: null,
@@ -87,8 +89,9 @@ export default {
       offCenterRectLabelStyle: {
         position: 'absolute',
         top: '100%',
-        left: '0',
-        width: '100%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        whiteSpace: 'nowrap',
         textAlign: 'center',
         color: 'rgba(60, 131, 255, 0.9)',
         fontSize: '13px',
@@ -400,6 +403,7 @@ export default {
         left: screenX + 'px',
         top: screenY + 'px',
         display: 'block',
+        overflow: 'visible',
         pointerEvents: 'none'
       }
     },
