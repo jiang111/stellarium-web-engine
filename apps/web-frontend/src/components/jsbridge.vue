@@ -1119,6 +1119,8 @@ export default {
           if (this.$stel._core_point_and_lock) {
             this.$stel._core_point_and_lock(0, 0)
           }
+          this.lastAlt = undefined
+          this.$store.commit('setARMode', false)
         },
         // updateFov 支持两种调用方式：
         // 1. updateFov(fovDeg) - 传入单个 fovY 度数
