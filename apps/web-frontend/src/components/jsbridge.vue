@@ -351,12 +351,22 @@ export default {
 
       // Using the stereographic projection formula
       const fovYRad = this.$store.state.stel.fov
-      // Calculate the focal length in pixels
+
+      // Account for aspect ratio in FOV calculation
+      // When aspect < 1 (portrait), core->fov is actually fovX (shorter edge),
+      // so we need to compute the real vertical FOV first
+      const aspect = canvas.width / canvas.height
+      let currentFovYRad = fovYRad
+      if (aspect < 1) {
+        currentFovYRad = 4 * Math.atan(Math.tan(fovYRad / 4) / aspect)
+      }
+
+      // Calculate the focal length in pixels using the real vertical FOV
       // In stereographic projection: r_screen = 2 * f * tan(theta/2)
       // At the edge, theta = fov/2, r_screen = height/2
       // So: height/2 = 2 * f * tan(fov/4)
       // f = height / (4 * tan(fov/4))
-      const focalLength = clientHeight / (4 * Math.tan(fovYRad / 4))
+      const focalLength = clientHeight / (4 * Math.tan(currentFovYRad / 4))
 
       // Project the center point
       // vView is [x, y, z] where z is negative for visible points
@@ -370,13 +380,6 @@ export default {
       // Use the same formula as updateFovBox
       const targetFovXRad = fovX * toRad
       const targetFovYRad = fovY * toRad
-
-      // Account for aspect ratio in FOV calculation
-      const aspect = canvas.width / canvas.height
-      let currentFovYRad = fovYRad
-      if (aspect < 1) {
-        currentFovYRad = 4 * Math.atan(Math.tan(fovYRad / 4) / aspect)
-      }
 
       const widthPx = clientHeight * Math.tan(targetFovXRad / 4) / Math.tan(currentFovYRad / 4)
       const heightPx = clientHeight * Math.tan(targetFovYRad / 4) / Math.tan(currentFovYRad / 4)
