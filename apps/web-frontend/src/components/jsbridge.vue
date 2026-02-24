@@ -58,14 +58,14 @@ export default {
       centerFovLabel: '',
       centerFovLabelStyle: {
         position: 'absolute',
-        top: '100%',
+        bottom: '100%',
         left: '50%',
         transform: 'translateX(-50%)',
         whiteSpace: 'nowrap',
         textAlign: 'center',
         color: 'rgba(244, 129, 35, 0.9)',
         fontSize: '13px',
-        marginTop: '4px',
+        marginBottom: '4px',
         pointerEvents: 'none'
       },
       fovAnimationId: null,
