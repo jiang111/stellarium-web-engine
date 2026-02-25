@@ -616,20 +616,6 @@ export default {
 
       this.mosaicTiles = tiles
 
-      // 强制触发 iOS WebView 重绘，防止静止时 WKWebView 不合成 DOM 更新
-      this.$nextTick(() => {
-        const el = this.$el
-        if (el) {
-          // 遍历所有 mosaic-tile 节点，逐个强制重绘
-          const tileEls = el.querySelectorAll('.mosaic-tile')
-          tileEls.forEach(tileEl => {
-            tileEl.style.webkitTransform = tileEl.style.webkitTransform || ''
-            // eslint-disable-next-line no-void
-            void tileEl.offsetHeight // eslint-disable-line no-unused-expressions
-          })
-        }
-      })
-
       // 节流发送 mosaic tiles 数据给 native (10fps)
       const now = Date.now()
       if (now - this.lastMosaicUpdate > 500) {
