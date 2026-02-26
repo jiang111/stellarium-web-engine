@@ -14,9 +14,33 @@ Module.afterInit(function() {
   var mouseDown = false;
   var mouseButtons = 0;
   var mousePos;
+  var contextLost = false;
+
+  // Handle WebGL context loss (common on iOS under GPU memory pressure).
+  // When context is lost, all GL resources (shaders, textures, buffers)
+  // become invalid. Since the C/WASM layer caches GL handles internally,
+  // the only reliable recovery is to reload the page.
+  Module.canvas.addEventListener('webglcontextlost', function(e) {
+    console.warn('[SWE] WebGL context lost');
+    e.preventDefault(); // Allow browser to attempt context restoration
+    contextLost = true;
+  }, false);
+
+  Module.canvas.addEventListener('webglcontextrestored', function(e) {
+    console.warn('[SWE] WebGL context restored, reloading page to rebuild GL resources');
+    location.reload();
+  }, false);
 
   // Function called at each frame
   var render = function(timestamp) {
+
+    // Skip rendering when WebGL context is lost to avoid invalid GL calls.
+    // The requestAnimationFrame loop continues so that rendering resumes
+    // automatically if the context is restored (before reload kicks in).
+    if (contextLost) {
+      window.requestAnimationFrame(render);
+      return;
+    }
 
     if (mouseDown)
       Module._core_on_mouse(0, 1, mousePos.x, mousePos.y, mouseButtons);
