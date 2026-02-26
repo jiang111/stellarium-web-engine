@@ -1,6 +1,17 @@
 <template>
   <div class="jsbridge-overlay"
        style="overflow: hidden; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
+    <!-- 触摸禁用遮罩 -->
+    <div v-if="touchDisabled"
+         style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 99999; pointer-events: auto; background: transparent;"
+         @touchstart.prevent.stop
+         @touchmove.prevent.stop
+         @touchend.prevent.stop
+         @mousedown.prevent.stop
+         @mouseup.prevent.stop
+         @mousemove.prevent.stop
+         @click.prevent.stop
+    ></div>
     <div v-if="showCenterFov && !showMosaic" :style="fovBoxStyle">
       <div v-if="centerFovLabel" :style="centerFovLabelStyle">{{ centerFovLabel }}</div>
     </div>
@@ -108,7 +119,9 @@ export default {
       mosaicTiles: [], // 存储每个 tile 的样式和信息
       lastMosaicUpdate: 0,
       // 标记是否通过 jsbridge 设置过时间
-      hasSetDateTime: false
+      hasSetDateTime: false,
+      // 触摸禁用标志
+      touchDisabled: false
     }
   },
   mounted () {
@@ -1181,6 +1194,10 @@ export default {
           () => {
             this.updateState()
           },
+        // 启用/禁用触摸
+        enableTouch: (enabled) => {
+          this.touchDisabled = !enabled
+        },
         drawLines: (data) => {
           this.clearLines()
           const {
