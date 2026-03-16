@@ -284,7 +284,7 @@ static int atmosphere_init(obj_t *obj, json_value *args)
 {
     atmosphere_t *atm = (void*)obj;
     atm->turbidity = 0.96;  // Calibrated visually
-    fader_init(&atm->visible, true);
+    fader_init(&atm->visible, false);
     return 0;
 }
 
