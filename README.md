@@ -3,7 +3,7 @@ Stellarium Web Engine
 
 About
 ----- 
-
+ 
 Stellarium Web Engine is a JavaScript planetarium renderer using
 WebGL that can be embedded into a website.
 
