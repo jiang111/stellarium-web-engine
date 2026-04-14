@@ -1,6 +1,6 @@
 <template>
-  <div class="jsbridge-overlay"
-       style="overflow: hidden; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center;">
+  <div ref="overlay" class="jsbridge-overlay"
+       style="overflow: hidden; position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; align-items: center; justify-content: center; z-index: 1001;">
     <div v-if="showCenterFov && !showMosaic" :style="fovBoxStyle">
       <div v-if="centerFovLabel" :style="centerFovLabelStyle">{{ centerFovLabel }}</div>
     </div>
@@ -116,9 +116,18 @@ export default {
   mounted () {
     this.registerBridgeActions()
     this.startFovAnimation()
+    // 将 overlay 移到 body 层级，脱离 #app 的 stacking context
+    // 这样 z-index:1001 能正确覆盖 #nightmode(z-index:1000)，不被夜间模式 multiply 混合影响
+    if (this.$refs.overlay) {
+      document.body.appendChild(this.$refs.overlay)
+    }
   },
   beforeDestroy () {
     this.stopFovAnimation()
+    // 清理：将 overlay 从 body 移除
+    if (this.$refs.overlay && this.$refs.overlay.parentNode === document.body) {
+      document.body.removeChild(this.$refs.overlay)
+    }
   },
   watch: {
     '$store.state.arMode': function (newVal) {
