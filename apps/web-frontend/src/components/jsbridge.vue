@@ -1212,7 +1212,13 @@ export default {
           const {
             points: pointsList = [],
             color = '#FF0000',
-            width = 2
+            width = 2,
+            timeLabels = null,
+            showLabels = false,
+            showArrow = false,
+            nightStartIndex = null,
+            nightEndIndex = null,
+            nightColor = null
           } = data
 
           if (!pointsList || pointsList.length < 2) {
@@ -1242,6 +1248,11 @@ export default {
           }
 
           const getVecIcrf = (pt) => {
+            // 新协议：Flutter 直接传 J2000 ICRF ra/dec（度），不再走 OBSERVED→ICRF 反变换
+            if (pt.ra !== undefined && pt.dec !== undefined) {
+              return this.$stel.s2c(pt.ra * toRad, pt.dec * toRad)
+            }
+            // 兼容旧 alt/az：用当前 observer 反变换（存在时间不一致问题，仅作兜底）
             const azR = pt.az * toRad
             const altR = pt.alt * toRad
             const vObs = this.$stel.s2c(azR, altR)
@@ -1272,6 +1283,8 @@ export default {
           const interpolationStepDeg = 0.5 // 每0.5度插值一个点
           const interpolationStepRad = interpolationStepDeg * toRad
           const icrfPoints = []
+          // 记录每个 rawIcrfPoints[i] 在 icrfPoints 中的索引，方便后续按 raw 索引区间映射累积角度
+          const rawIndexToIcrfIndex = new Array(rawIcrfPoints.length).fill(-1)
 
           for (let i = 0; i < rawIcrfPoints.length - 1; i++) {
             const v1 = rawIcrfPoints[i]
@@ -1280,8 +1293,10 @@ export default {
             const dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
             const segAngle = Math.acos(Math.min(1, Math.max(-1, dot)))
 
-            // 跳过首尾重合的零长度线段
+            rawIndexToIcrfIndex[i] = icrfPoints.length
+            // 几乎重合：补一个点占位，保证 raw 索引可定位
             if (segAngle < 1e-9) {
+              icrfPoints.push(v1)
               continue
             }
 
@@ -1295,6 +1310,7 @@ export default {
           }
           // 添加最后一个点
           if (rawIcrfPoints.length > 0) {
+            rawIndexToIcrfIndex[rawIcrfPoints.length - 1] = icrfPoints.length
             icrfPoints.push(rawIcrfPoints[rawIcrfPoints.length - 1])
           }
 
@@ -1309,6 +1325,31 @@ export default {
             segmentAngles.push({ start: totalAngle, angle: angle, v1: v1, v2: v2 })
             totalAngle += angle
           }
+
+          // 5b. 每个 raw 点对应的累积弧长，便于把 raw 索引（含小数）映射到角度区间
+          const icrfCumulative = [0]
+          for (const seg of segmentAngles) {
+            icrfCumulative.push(seg.start + seg.angle)
+          }
+          const rawIndexToAngle = (idx) => {
+            if (idx == null || !isFinite(idx)) return null
+            const maxRaw = rawIcrfPoints.length - 1
+            if (idx <= 0) return 0
+            if (idx >= maxRaw) return totalAngle
+            const i0 = Math.floor(idx)
+            const i1 = i0 + 1
+            const a0Idx = rawIndexToIcrfIndex[i0]
+            const a1Idx = rawIndexToIcrfIndex[i1]
+            if (a0Idx < 0 || a1Idx < 0) return null
+            const a0 = icrfCumulative[a0Idx]
+            const a1 = icrfCumulative[a1Idx]
+            return a0 + (a1 - a0) * (idx - i0)
+          }
+          const nightStartAngle = rawIndexToAngle(nightStartIndex)
+          const nightEndAngle = rawIndexToAngle(nightEndIndex)
+          const hasNight = nightColor && nightStartAngle != null && nightEndAngle != null && nightEndAngle > nightStartAngle
+          const angleIsNight = (a) => hasNight && a >= nightStartAngle && a <= nightEndAngle
+          const indexIsNight = (idx) => hasNight && nightStartIndex != null && nightEndIndex != null && idx >= nightStartIndex && idx <= nightEndIndex
 
           // 6. 沿整个圆周连续生成虚线
           const getPointAtAngle = (targetAngle) => {
@@ -1344,10 +1385,12 @@ export default {
             }
 
             if (dashCoords.length >= 2) {
+              const midAngle = (currentAngle + dashEndAngle) / 2
+              const strokeColor = angleIsNight(midAngle) ? nightColor : color
               features.push({
                 type: 'Feature',
                 properties: {
-                  stroke: color,
+                  stroke: strokeColor,
                   'stroke-width': width
                 },
                 geometry: {
@@ -1358,6 +1401,98 @@ export default {
             }
 
             currentAngle += dashRad + gapRad
+          }
+
+          // 时间点：每个 timeLabel 处可同时画文本标签 + 方向箭头
+          if (Array.isArray(timeLabels) && (showLabels || showArrow)) {
+            const wingRad = 0.35 * toRad
+            const spreadRad = 22 * toRad
+            const cw = Math.cos(wingRad); const sw = Math.sin(wingRad)
+            const cs = Math.cos(spreadRad); const ss = Math.sin(spreadRad)
+
+            for (const lbl of timeLabels) {
+              if (lbl.index < 0 || lbl.index >= rawIcrfPoints.length) continue
+              const v2 = rawIcrfPoints[lbl.index]
+              const tip = vecToRaDecDeg(v2)
+              const lblColor = indexIsNight(lbl.index) ? nightColor : color
+
+              if (showLabels) {
+                features.push({
+                  type: 'Feature',
+                  properties: {
+                    title: lbl.text,
+                    fill: lblColor,
+                    stroke: lblColor,
+                    'fill-opacity': 0,
+                    'text-size': 16,
+                    'text-anchor': 'center',
+                    'text-offset': [0, -16]
+                  },
+                  geometry: { type: 'Point', coordinates: tip }
+                })
+              }
+
+              // 箭头：用 (prev, lbl.index) 的方向构造 V 字形翼，箭尖在 lbl.index 处指向"未来"
+              // index==0 时（如 12:00 起点）用闭合圆的 length-2 处作为 prev
+              if (showArrow && rawIcrfPoints.length >= 2) {
+                const prevIdx = lbl.index >= 1 ? lbl.index - 1 : rawIcrfPoints.length - 2
+                const v1 = rawIcrfPoints[prevIdx]
+                const dotProd = v2[0] * v1[0] + v2[1] * v1[1] + v2[2] * v1[2]
+                let tx = -(v1[0] - dotProd * v2[0])
+                let ty = -(v1[1] - dotProd * v2[1])
+                let tz = -(v1[2] - dotProd * v2[2])
+                const tLen = Math.sqrt(tx * tx + ty * ty + tz * tz) || 1
+                tx /= tLen; ty /= tLen; tz /= tLen
+
+                const bx = v2[1] * tz - v2[2] * ty
+                const by = v2[2] * tx - v2[0] * tz
+                const bz = v2[0] * ty - v2[1] * tx
+
+                const makeWingVec = (sign) => {
+                  const s = ss * sign
+                  const dx = -cs * tx + s * bx
+                  const dy = -cs * ty + s * by
+                  const dz = -cs * tz + s * bz
+                  return [
+                    v2[0] * cw + dx * sw,
+                    v2[1] * cw + dy * sw,
+                    v2[2] * cw + dz * sw
+                  ]
+                }
+                const vW1 = makeWingVec(+1)
+                const vW2 = makeWingVec(-1)
+                // 绕开 stellarium 在 iOS WebGL 上 Polygon fill 走 stencil 路径产生大色块的 bug：
+                // 用 LineString 闭合三角形轮廓，边在球面上细分，视觉接近实心三角形
+                const edgeSteps = 6
+                const interpEdge = (vA, vB) => {
+                  const arr = []
+                  for (let k = 1; k <= edgeSteps; k++) {
+                    arr.push(vecToRaDecDeg(slerp(vA, vB, k / edgeSteps)))
+                  }
+                  return arr
+                }
+                const triCoords = [
+                  tip,
+                  ...interpEdge(v2, vW1),
+                  ...interpEdge(vW1, vW2),
+                  ...interpEdge(vW2, v2)
+                ]
+
+                features.push({
+                  type: 'Feature',
+                  properties: {
+                    fill: lblColor,
+                    stroke: lblColor,
+                    'fill-opacity': 1,
+                    'stroke-width': 1
+                  },
+                  geometry: {
+                    type: 'Polygon',
+                    coordinates: [triCoords]
+                  }
+                })
+              }
+            }
           }
 
           const geojsonData = {
