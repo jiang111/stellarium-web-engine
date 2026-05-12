@@ -28,6 +28,8 @@ export default {
       },
       linesLayer: null,
       linesObj: null,
+      linesArrowObj: null,
+      linesArrowBuilder: null,
       currentRectLayer: null,
       currentRectObj: null,
       smoothing: {
@@ -135,6 +137,7 @@ export default {
     },
     '$store.state.stel.fov': function () {
       this.updateFovBox()
+      this.updateArrows()
     }
   },
   methods: {
@@ -1403,38 +1406,48 @@ export default {
             currentAngle += dashRad + gapRad
           }
 
-          // 时间点：每个 timeLabel 处可同时画文本标签 + 方向箭头
-          if (Array.isArray(timeLabels) && (showLabels || showArrow)) {
-            const wingRad = 0.35 * toRad
-            const spreadRad = 22 * toRad
-            const cw = Math.cos(wingRad); const sw = Math.sin(wingRad)
-            const cs = Math.cos(spreadRad); const ss = Math.sin(spreadRad)
-
+          // 时间点：文本标签（球面坐标固定，不依赖 fov）
+          if (Array.isArray(timeLabels) && showLabels) {
             for (const lbl of timeLabels) {
               if (lbl.index < 0 || lbl.index >= rawIcrfPoints.length) continue
               const v2 = rawIcrfPoints[lbl.index]
               const tip = vecToRaDecDeg(v2)
               const lblColor = indexIsNight(lbl.index) ? nightColor : color
+              features.push({
+                type: 'Feature',
+                properties: {
+                  title: lbl.text,
+                  fill: lblColor,
+                  stroke: lblColor,
+                  'fill-opacity': 0,
+                  'text-size': 16,
+                  'text-anchor': 'center',
+                  'text-offset': [0, -16]
+                },
+                geometry: { type: 'Point', coordinates: tip }
+              })
+            }
+          }
 
-              if (showLabels) {
-                features.push({
-                  type: 'Feature',
-                  properties: {
-                    title: lbl.text,
-                    fill: lblColor,
-                    stroke: lblColor,
-                    'fill-opacity': 0,
-                    'text-size': 16,
-                    'text-anchor': 'center',
-                    'text-offset': [0, -16]
-                  },
-                  geometry: { type: 'Point', coordinates: tip }
-                })
-              }
+          // 箭头三角形：球面尺寸随 fov 缩放，封装成 builder 供 fov watch 重建
+          let buildArrowFeatures = null
+          if (Array.isArray(timeLabels) && showArrow && rawIcrfPoints.length >= 2) {
+            buildArrowFeatures = (currentFovY) => {
+              // 三角形大小按当前 fov 等比缩放（约占屏幕高度 2%），上限 4°
+              const wingRad = Math.min(currentFovY * 0.02, 4 * toRad)
+              const spreadRad = 22 * toRad
+              const cw = Math.cos(wingRad); const sw = Math.sin(wingRad)
+              const cs = Math.cos(spreadRad); const ss = Math.sin(spreadRad)
+              const arrowFeatures = []
 
-              // 箭头：用 (prev, lbl.index) 的方向构造 V 字形翼，箭尖在 lbl.index 处指向"未来"
-              // index==0 时（如 12:00 起点）用闭合圆的 length-2 处作为 prev
-              if (showArrow && rawIcrfPoints.length >= 2) {
+              for (const lbl of timeLabels) {
+                if (lbl.index < 0 || lbl.index >= rawIcrfPoints.length) continue
+                const v2 = rawIcrfPoints[lbl.index]
+                const tip = vecToRaDecDeg(v2)
+                const lblColor = indexIsNight(lbl.index) ? nightColor : color
+
+                // 箭头：用 (prev, lbl.index) 的方向构造 V 字形翼，箭尖在 lbl.index 处指向"未来"
+                // index==0 时（如 12:00 起点）用闭合圆的 length-2 处作为 prev
                 const prevIdx = lbl.index >= 1 ? lbl.index - 1 : rawIcrfPoints.length - 2
                 const v1 = rawIcrfPoints[prevIdx]
                 const dotProd = v2[0] * v1[0] + v2[1] * v1[1] + v2[2] * v1[2]
@@ -1478,7 +1491,7 @@ export default {
                   ...interpEdge(vW2, v2)
                 ]
 
-                features.push({
+                arrowFeatures.push({
                   type: 'Feature',
                   properties: {
                     fill: lblColor,
@@ -1492,12 +1505,8 @@ export default {
                   }
                 })
               }
+              return arrowFeatures
             }
-          }
-
-          const geojsonData = {
-            type: 'FeatureCollection',
-            features: features
           }
 
           // 先清除旧的 geojson 对象（如果存在）
@@ -1514,13 +1523,24 @@ export default {
           }
           layer.visible = true
 
+          // 静态 obj：虚线轨迹 + 文本标签
           const lineObj = this.$stel.createObj('geojson', {
-            data: geojsonData
+            data: { type: 'FeatureCollection', features: features }
           })
-
           layer.add(lineObj)
           this.linesLayer = layer
-          this.linesObj = lineObj // 保存 geojson 对象引用
+          this.linesObj = lineObj
+
+          // 动态 obj：三角形箭头（随 fov 变化由 watch 重建）
+          if (buildArrowFeatures) {
+            const currentFovY = this.$store.state.stel.fov || (60 * toRad)
+            const arrowObj = this.$stel.createObj('geojson', {
+              data: { type: 'FeatureCollection', features: buildArrowFeatures(currentFovY) }
+            })
+            layer.add(arrowObj)
+            this.linesArrowObj = arrowObj
+            this.linesArrowBuilder = buildArrowFeatures
+          }
         },
         clearLines: () => {
           this.clearLines()
@@ -1528,11 +1548,26 @@ export default {
       })
     },
     clearLines: function () {
-      if (this.linesLayer && this.linesObj) {
-        this.linesLayer.remove(this.linesObj)
+      if (this.linesLayer) {
+        if (this.linesObj) this.linesLayer.remove(this.linesObj)
+        if (this.linesArrowObj) this.linesLayer.remove(this.linesArrowObj)
         this.linesLayer.visible = false
-        this.linesObj = null
       }
+      this.linesObj = null
+      this.linesArrowObj = null
+      this.linesArrowBuilder = null
+    },
+    updateArrows: function () {
+      if (!this.linesArrowBuilder || !this.linesLayer) return
+      const currentFovY = this.$store.state.stel.fov || (60 * Math.PI / 180)
+      const newArrowObj = this.$stel.createObj('geojson', {
+        data: { type: 'FeatureCollection', features: this.linesArrowBuilder(currentFovY) }
+      })
+      this.linesLayer.add(newArrowObj)
+      if (this.linesArrowObj) {
+        this.linesLayer.remove(this.linesArrowObj)
+      }
+      this.linesArrowObj = newArrowObj
     },
     getLocalTime: function () {
       // 只有通过 jsbridge 调用 setDateTime 设置过时间才返回时间值
