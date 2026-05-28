@@ -236,9 +236,55 @@ static int movements_on_zoom(obj_t *obj, double k, double x, double y)
 
 static int movements_update(obj_t *obj, double dt)
 {
+    movements_t *movs = (void*)obj;
     const double ZOOM_FACTOR = 1.05;
     const double MOVE_SPEED  = 1 * DD2R;
 
+    /* —— 惯性阻尼推进 —— */
+    if (movs->inertia_active) {
+        /* 退出守卫：lock 或动画时让位 */
+        if (core->target.lock || core->target.src_time != 0) {
+            movs->inertia_active = false;
+            movs->velocity_yaw = 0;
+            movs->velocity_pitch = 0;
+        } else {
+            double decay;
+            double stop_eps = INERTIA_STOP_EPS_RATIO * core->fov;
+
+            /* a. yaw / pitch 推进 */
+            core->observer->yaw   += movs->velocity_yaw   * dt;
+            core->observer->pitch += movs->velocity_pitch * dt;
+
+            /* b. pitch clamp，撞顶/底清零对应轴 */
+            if (core->observer->pitch >  M_PI / 2) {
+                core->observer->pitch =  M_PI / 2;
+                movs->velocity_pitch = 0;
+            }
+            if (core->observer->pitch < -M_PI / 2) {
+                core->observer->pitch = -M_PI / 2;
+                movs->velocity_pitch = 0;
+            }
+
+            /* c. 指数衰减 */
+            decay = exp(-INERTIA_DAMP_K * dt);
+            movs->velocity_yaw   *= decay;
+            movs->velocity_pitch *= decay;
+
+            /* d. 低于阈值停止 */
+            if (fabs(movs->velocity_yaw)   < stop_eps &&
+                fabs(movs->velocity_pitch) < stop_eps) {
+                movs->inertia_active = false;
+                movs->velocity_yaw = 0;
+                movs->velocity_pitch = 0;
+            }
+
+            /* e. 通知变更 */
+            module_changed(&core->observer->obj, "yaw");
+            module_changed(&core->observer->obj, "pitch");
+        }
+    }
+
+    /* —— 原有键盘逻辑（PC 端，非本次目标但保留） —— */
     if (core->inputs.keys[KEY_RIGHT])
         core->observer->yaw += MOVE_SPEED * core->fov;
     if (core->inputs.keys[KEY_LEFT])
