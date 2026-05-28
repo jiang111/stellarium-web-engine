@@ -51,10 +51,12 @@ static void screen_to_mount(
 
 static int on_pan(const gesture_t *gest, void *user)
 {
+    movements_t *movs = user;
     double sal, saz, dal, daz;
     double pos[3];
     static double start_pos[3];
     projection_t proj;
+    double now, sample_dt;
 
     core_get_proj(&proj);
     screen_to_mount(core->observer, &proj, gest->pos, pos);
@@ -69,7 +71,35 @@ static int on_pan(const gesture_t *gest, void *user)
 
     obj_set_attr(&core->obj, "lock", NULL);
     observer_update(core->observer, true);
-    // Notify the changes.
+
+    /* —— 速度采样 —— */
+    now = core->clock;
+    if (gest->state == GESTURE_BEGIN) {
+        /* 新 pan 开始：清惯性、重置采样基线 */
+        movs->inertia_active = false;
+        movs->velocity_yaw = 0;
+        movs->velocity_pitch = 0;
+        movs->last_yaw = core->observer->yaw;
+        movs->last_pitch = core->observer->pitch;
+        movs->last_pan_time = now;
+    } else {
+        /* UPDATE 或 END：估算瞬时角速度 */
+        sample_dt = now - movs->last_pan_time;
+        if (sample_dt > 1e-4 && sample_dt < INERTIA_MAX_SAMPLE_DT) {
+            movs->velocity_yaw =
+                (core->observer->yaw   - movs->last_yaw)   / sample_dt;
+            movs->velocity_pitch =
+                (core->observer->pitch - movs->last_pitch) / sample_dt;
+        } else {
+            movs->velocity_yaw = 0;
+            movs->velocity_pitch = 0;
+        }
+        movs->last_yaw = core->observer->yaw;
+        movs->last_pitch = core->observer->pitch;
+        movs->last_pan_time = now;
+    }
+
+    /* Notify the changes. */
     module_changed(&core->observer->obj, "pitch");
     module_changed(&core->observer->obj, "yaw");
     return 0;
