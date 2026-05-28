@@ -139,10 +139,15 @@ static int on_click(const gesture_t *gest, void *user)
 
 static int on_pinch(const gesture_t *gest, void *user)
 {
+    movements_t *movs = user;
     static double start_fov = 0;
     projection_t proj;
     if (gest->state == GESTURE_BEGIN) {
         start_fov = core->fov;
+        /* pinch 开始：清零正在进行的惯性 */
+        movs->inertia_active = false;
+        movs->velocity_yaw = 0;
+        movs->velocity_pitch = 0;
     }
     core->fov = start_fov / gest->pinch;
     core_get_proj(&proj);
