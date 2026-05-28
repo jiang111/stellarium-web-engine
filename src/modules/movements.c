@@ -14,11 +14,26 @@
 
 #include "swe.h"
 
+/* —— 惯性阻尼参数 —— */
+#define INERTIA_DAMP_K          4.0    /* 衰减常数 (1/s) */
+#define INERTIA_START_EPS_RATIO 0.1    /* 启动阈值相对 fov 的系数 */
+#define INERTIA_STOP_EPS_RATIO  0.005  /* 停止阈值相对 fov 的系数 */
+#define INERTIA_MAX_SAMPLE_DT   0.15   /* 速度采样最大间隔 (秒) */
+
 typedef struct movements {
     obj_t           obj;
     gesture_t       gest_pan;
     gesture_t       gest_click;
     gesture_t       gest_pinch;
+
+    /* —— 惯性阻尼状态 —— */
+    bool            inertia_active;     /* 是否正在自动滑行 */
+    double          velocity_yaw;       /* rad/s */
+    double          velocity_pitch;     /* rad/s */
+    /* 速度采样：on_pan 每帧更新 */
+    double          last_yaw;
+    double          last_pitch;
+    double          last_pan_time;      /* core->clock，秒 */
 } movements_t;
 
 
