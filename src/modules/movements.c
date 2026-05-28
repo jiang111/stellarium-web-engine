@@ -99,6 +99,21 @@ static int on_pan(const gesture_t *gest, void *user)
         movs->last_pan_time = now;
     }
 
+    /* —— GESTURE_END 时决定是否启动惯性 —— */
+    if (gest->state == GESTURE_END) {
+        double v2 = movs->velocity_yaw * movs->velocity_yaw +
+                    movs->velocity_pitch * movs->velocity_pitch;
+        double start_eps = INERTIA_START_EPS_RATIO * core->fov;
+        bool second_finger = core->inputs.touches[1].id != 0;
+        if (v2 > start_eps * start_eps && !second_finger) {
+            movs->inertia_active = true;
+        } else {
+            movs->inertia_active = false;
+            movs->velocity_yaw = 0;
+            movs->velocity_pitch = 0;
+        }
+    }
+
     /* Notify the changes. */
     module_changed(&core->observer->obj, "pitch");
     module_changed(&core->observer->obj, "yaw");
