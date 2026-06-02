@@ -15,10 +15,13 @@
 #include "swe.h"
 
 /* —— 惯性阻尼参数 —— */
-#define INERTIA_DAMP_K          4.0    /* 衰减常数 (1/s) */
+#define INERTIA_DAMP_K          7.0    /* 指数衰减常数 (1/s)，越大停得越快 */
 #define INERTIA_START_EPS_RATIO 0.1    /* 启动阈值相对 fov 的系数 */
-#define INERTIA_STOP_EPS_RATIO  0.005  /* 停止阈值相对 fov 的系数 */
+#define INERTIA_LINEAR_DECEL    1.0    /* 线性收尾减速度相对 fov 的系数 (1/s^2) */
+#define INERTIA_MAX_DIST_RATIO  0.5    /* 单次滑行最大累计角距离相对 fov 的系数 */
+#define INERTIA_BRAKE_DECEL     8.0    /* 接近距离上限时的制动减速度相对 fov 的系数 (1/s^2) */
 #define INERTIA_MAX_SAMPLE_DT   0.15   /* 速度采样最大间隔 (秒) */
+#define INERTIA_VEL_SMOOTH      0.6    /* 松手速度 EMA 平滑系数 */
 
 typedef struct movements {
     obj_t           obj;
@@ -30,10 +33,12 @@ typedef struct movements {
     bool            inertia_active;     /* 是否正在自动滑行 */
     double          velocity_yaw;       /* rad/s */
     double          velocity_pitch;     /* rad/s */
-    /* 速度采样：on_pan 每帧更新 */
+    double          inertia_dist;       /* 本次滑行累计角距离 (rad) */
+    /* 速度采样：on_pan 在 GESTURE_UPDATE 时逐事件更新 */
+    bool            vel_sampled;        /* 本次 pan 是否已取到首个速度样本 */
     double          last_yaw;
     double          last_pitch;
-    double          last_pan_time;      /* core->clock，秒 */
+    double          last_pan_time;      /* sys_get_unix_time()，秒，子帧精度 */
 } movements_t;
 
 
@@ -61,7 +66,9 @@ static int on_pan(const gesture_t *gest, void *user)
     core_get_proj(&proj);
     screen_to_mount(core->observer, &proj, gest->pos, pos);
     if (gest->state == GESTURE_BEGIN)
-        vec3_copy(pos, start_pos);
+        /* 基准取手指最初按下点(start_pos)，BEGIN 帧即把越过拖动死区的
+         * 那段位移补上，消除起手延迟、让星图立刻咬住手指。 */
+        screen_to_mount(core->observer, &proj, gest->start_pos[0], start_pos);
 
     vec3_to_sphe(start_pos, &saz, &sal);
     vec3_to_sphe(pos, &daz, &dal);
@@ -72,41 +79,63 @@ static int on_pan(const gesture_t *gest, void *user)
     obj_set_attr(&core->obj, "lock", NULL);
     observer_update(core->observer, true);
 
-    /* —— 速度采样 —— */
-    now = core->clock;
+    /* —— 速度采样 ——
+     * 用 sys_get_unix_time() 取逐事件时间戳：core->clock 每帧只更新一次，
+     * 而触摸事件在两帧间成批派发，全部读到同一 core->clock，会让 sample_dt=0
+     * 把速度判 0，惯性永远启动不了。 */
+    now = sys_get_unix_time();
     if (gest->state == GESTURE_BEGIN) {
         /* 新 pan 开始：清惯性、重置采样基线 */
         movs->inertia_active = false;
         movs->velocity_yaw = 0;
         movs->velocity_pitch = 0;
+        movs->vel_sampled = false;
         movs->last_yaw = core->observer->yaw;
         movs->last_pitch = core->observer->pitch;
         movs->last_pan_time = now;
-    } else {
-        /* UPDATE 或 END：估算瞬时角速度 */
+    } else if (gest->state == GESTURE_UPDATE) {
+        /* 仅 UPDATE 采样：抬手(END)那一下没有位移，重算只会把速度冲成 0 */
         sample_dt = now - movs->last_pan_time;
-        if (sample_dt > 1e-4 && sample_dt < INERTIA_MAX_SAMPLE_DT) {
-            movs->velocity_yaw =
-                (core->observer->yaw   - movs->last_yaw)   / sample_dt;
-            movs->velocity_pitch =
-                (core->observer->pitch - movs->last_pitch) / sample_dt;
-        } else {
-            movs->velocity_yaw = 0;
-            movs->velocity_pitch = 0;
+        if (sample_dt > 1e-4) {
+            if (sample_dt < INERTIA_MAX_SAMPLE_DT) {
+                double inst_yaw =
+                    (core->observer->yaw   - movs->last_yaw)   / sample_dt;
+                double inst_pitch =
+                    (core->observer->pitch - movs->last_pitch) / sample_dt;
+                if (!movs->vel_sampled) {
+                    /* 首个样本直接播种，避免 EMA 冷启动低估快速甩动 */
+                    movs->velocity_yaw = inst_yaw;
+                    movs->velocity_pitch = inst_pitch;
+                    movs->vel_sampled = true;
+                } else {
+                    movs->velocity_yaw = INERTIA_VEL_SMOOTH * inst_yaw +
+                        (1 - INERTIA_VEL_SMOOTH) * movs->velocity_yaw;
+                    movs->velocity_pitch = INERTIA_VEL_SMOOTH * inst_pitch +
+                        (1 - INERTIA_VEL_SMOOTH) * movs->velocity_pitch;
+                }
+            } else {
+                /* 移动间隔过长（中途停顿）：丢弃旧速度，等待重新采样 */
+                movs->velocity_yaw = 0;
+                movs->velocity_pitch = 0;
+                movs->vel_sampled = false;
+            }
+            movs->last_yaw = core->observer->yaw;
+            movs->last_pitch = core->observer->pitch;
+            movs->last_pan_time = now;
         }
-        movs->last_yaw = core->observer->yaw;
-        movs->last_pitch = core->observer->pitch;
-        movs->last_pan_time = now;
     }
 
     /* —— GESTURE_END 时决定是否启动惯性 —— */
     if (gest->state == GESTURE_END) {
+        double idle = now - movs->last_pan_time;   /* 距最后一次移动的时间 */
         double v2 = movs->velocity_yaw * movs->velocity_yaw +
                     movs->velocity_pitch * movs->velocity_pitch;
         double start_eps = INERTIA_START_EPS_RATIO * core->fov;
         bool second_finger = core->inputs.touches[1].id != 0;
-        if (v2 > start_eps * start_eps && !second_finger) {
+        if (movs->vel_sampled && idle < INERTIA_MAX_SAMPLE_DT &&
+            v2 > start_eps * start_eps && !second_finger) {
             movs->inertia_active = true;
+            movs->inertia_dist = 0;
         } else {
             movs->inertia_active = false;
             movs->velocity_yaw = 0;
@@ -253,12 +282,14 @@ static int movements_update(obj_t *obj, double dt)
             movs->velocity_yaw = 0;
             movs->velocity_pitch = 0;
         } else {
-            double decay;
-            double stop_eps = INERTIA_STOP_EPS_RATIO * core->fov;
+            double decay, speed, lin, dyaw, dpitch;
 
-            /* a. yaw / pitch 推进 */
-            core->observer->yaw   += movs->velocity_yaw   * dt;
-            core->observer->pitch += movs->velocity_pitch * dt;
+            /* a. yaw / pitch 推进，并累计已滑行角距离 */
+            dyaw   = movs->velocity_yaw   * dt;
+            dpitch = movs->velocity_pitch * dt;
+            core->observer->yaw   += dyaw;
+            core->observer->pitch += dpitch;
+            movs->inertia_dist += sqrt(dyaw * dyaw + dpitch * dpitch);
 
             /* b. pitch clamp，撞顶/底清零对应轴 */
             if (core->observer->pitch >  M_PI / 2) {
@@ -270,20 +301,50 @@ static int movements_update(obj_t *obj, double dt)
                 movs->velocity_pitch = 0;
             }
 
-            /* c. 指数衰减 */
+            /* c. 指数衰减：高速段快速收速 */
             decay = exp(-INERTIA_DAMP_K * dt);
             movs->velocity_yaw   *= decay;
             movs->velocity_pitch *= decay;
 
-            /* d. 低于阈值停止 */
-            if (fabs(movs->velocity_yaw)   < stop_eps &&
-                fabs(movs->velocity_pitch) < stop_eps) {
+            /* d. 线性收尾：低速段匀减速到 0，消除指数长尾末端的
+             *    "慢速漂移 + 突停"卡顿，让停止平滑 */
+            speed = sqrt(movs->velocity_yaw   * movs->velocity_yaw +
+                         movs->velocity_pitch * movs->velocity_pitch);
+            lin = INERTIA_LINEAR_DECEL * core->fov * dt;
+            if (speed <= lin) {
                 movs->inertia_active = false;
                 movs->velocity_yaw = 0;
                 movs->velocity_pitch = 0;
+            } else {
+                double scale = (speed - lin) / speed;
+                movs->velocity_yaw   *= scale;
+                movs->velocity_pitch *= scale;
             }
 
-            /* e. 通知变更 */
+            /* e. 滑行距离软着陆：接近上限时按匀减速曲线
+             *    v_allow = sqrt(2 * a * remain) 限制速度，剩余距离越小允许
+             *    速度越低，到上限处速度恰好归零，平滑停止而非硬停。 */
+            {
+                double remain = INERTIA_MAX_DIST_RATIO * core->fov -
+                                movs->inertia_dist;
+                if (remain <= 0) {
+                    movs->inertia_active = false;
+                    movs->velocity_yaw = 0;
+                    movs->velocity_pitch = 0;
+                } else {
+                    double v_allow = sqrt(2 * INERTIA_BRAKE_DECEL *
+                                          core->fov * remain);
+                    speed = sqrt(movs->velocity_yaw * movs->velocity_yaw +
+                                 movs->velocity_pitch * movs->velocity_pitch);
+                    if (speed > v_allow && speed > 1e-9) {
+                        double scale = v_allow / speed;
+                        movs->velocity_yaw   *= scale;
+                        movs->velocity_pitch *= scale;
+                    }
+                }
+            }
+
+            /* f. 通知变更 */
             module_changed(&core->observer->obj, "yaw");
             module_changed(&core->observer->obj, "pitch");
         }

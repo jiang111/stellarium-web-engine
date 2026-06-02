@@ -13,9 +13,4 @@ var Module=typeof StelWebEngine!=="undefined"?StelWebEngine:{};var readyPromiseR
 }
 );
 })();
-if (typeof exports === 'object' && typeof module === 'object')
-  module.exports = StelWebEngine;
-else if (typeof define === 'function' && define['amd'])
-  define([], function() { return StelWebEngine; });
-else if (typeof exports === 'object')
-  exports["StelWebEngine"] = StelWebEngine;
+export default StelWebEngine;

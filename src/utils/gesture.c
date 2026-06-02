@@ -44,7 +44,8 @@ static int pan_on_mouse(gesture_t *g, const inputs_t *in, void *user)
         }
         if (vec2_dist2(g->start_pos[0], g->pos) > sqr(g_start_dist)) {
             g->state = GESTURE_BEGIN;
-            vec2_copy(g->start_pos[0], g->pos);
+            /* 不把基准重置为当前点：保留手指最初按下位置(start_pos)，
+             * 让回调能把越过死区那段位移一次性补上，起手即跟手。 */
             g->callback(g, user);
             g->state = GESTURE_UPDATE;
             return 1;
