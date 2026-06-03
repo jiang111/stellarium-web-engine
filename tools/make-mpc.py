@@ -29,7 +29,7 @@ def run():
     lines = sorted(lines, key=lambda x: float(x[8:14].strip() or 'inf'))
     # Keep only 500 first.
     lines = lines[:500]
-    out = open("apps/test-skydata/mpcorb.dat", "w")
+    out = open("apps/skydata/mpcorb.dat", "w")
     for line in lines:
         print(line, file=out)
     out.close()

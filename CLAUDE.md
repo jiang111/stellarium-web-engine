@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `ext_src/` — 第三方 C 库（erfa、webp、nanovg、zlib 等），不要修改
 - `apps/web-frontend/` — Vue 2 + Vuetify 的 GUI，使用 Docker 开发
 - `apps/simple-html/` — 不依赖构建工具的最小 HTML 示例
-- `apps/skydata/`、`apps/test-skydata/` — 星表/DSO/星座/地景等运行时数据（HTTP 加载）
+- `apps/skydata/` — 星表/DSO/星座/地景等运行时数据（HTTP 加载），dev 与生产共用同一份
 - `tools/` — 构建辅助 Python 脚本（资产打包、星表预处理等）
 - `doc/internals.md` — 引擎架构权威参考文档，开发引擎前必读
 
@@ -53,7 +53,7 @@ make update-engine-debug
 make i18n            # 提取国际化字符串
 ```
 
-Docker 容器会把 `apps/test-skydata` 挂到 `/skydata`。
+Docker 容器会把 `apps/skydata` 挂到 `/skydata`。
 
 ### Native 二进制（测试用）
 
@@ -119,9 +119,9 @@ ESLint：`vue-cli-service lint`（standard 风格 + vuetify 插件 + Vue essenti
 
 ## 数据目录（skydata）
 
-`apps/skydata/` 和 `apps/test-skydata/` 含 `stars/`、`dso/`、`skycultures/`、`landscapes/`、`surveys/`、`mpcorb.dat`、`CometEls.txt`、`tle_satellite.jsonl.gz`。前端 dev 容器把 `test-skydata` 挂到 `/skydata`。
+`apps/skydata/` 含 `stars/`、`dso/`、`skycultures/`、`landscapes/`、`surveys/`、`mpcorb.dat`、`CometEls.txt`、`tle_satellite.jsonl.gz`。dev 容器（`Makefile` 挂载）和生产构建（`vue.config.js` 拷贝）都用这一份，已与原 `test-skydata` 整合为单一目录。
 
-**当前分支的未跟踪文件**：`apps/skydata/skycultures/chinese/`、`apps/test-skydata/skycultures/chinese/`——新增的中文星座文化数据，未提交。如果改 skyculture 相关代码记得验证这两个目录。
+**当前分支的未跟踪文件**：`apps/skydata/skycultures/chinese/`——新增的中文星座文化数据，未提交。如果改 skyculture 相关代码记得验证该目录。
 
 `.DS_Store` 在多处被 modified（macOS 生成），不要把它们提交进去。
 
