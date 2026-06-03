@@ -697,6 +697,8 @@ static int line_render(obj_t *obj, const painter_t *painter_)
 
     vec4_copy(line->color, painter.color);
     painter.color[3] *= line->visible.value;
+    // 网格/坐标参考线不要光晕，只保留抗锯齿实线。
+    painter.lines.glow = 0;
 
     // The boundary line has its own code.
     if (strcmp(line->obj.id, "boundary") == 0) {

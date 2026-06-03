@@ -1394,7 +1394,8 @@ export default {
                 type: 'Feature',
                 properties: {
                   stroke: strokeColor,
-                  'stroke-width': width
+                  'stroke-width': width,
+                  'stroke-glow': true
                 },
                 geometry: {
                   type: 'LineString',
