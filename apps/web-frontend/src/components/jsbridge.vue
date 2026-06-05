@@ -1214,7 +1214,7 @@ export default {
           this.clearLines()
           const {
             points: pointsList = [],
-            color = '#FF0000',
+            color = '#F48123',
             width = 2,
             timeLabels = null,
             showLabels = false,
